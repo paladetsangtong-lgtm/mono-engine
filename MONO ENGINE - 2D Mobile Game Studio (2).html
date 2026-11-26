@@ -1,0 +1,3325 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MONO ENGINE — เอ็นจิ้นสร้างเกม 2D บนมือถือ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt (ภาษาไทยอ่านง่าย ทันสมัย) & JetBrains Mono (สำหรับ Code Editor) -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tone.js สำหรับเสียงเอฟเฟกต์ในเกม (ไม่ใช้ไฟล์เสียงภายนอก) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* กำหนดธีมสีขาว (#FFFFFF) และสีดำ (#000000) อย่างเคร่งครัดทั่วทั้งแอป */
+        :root {
+            --bg-black: #000000;
+            --bg-white: #ffffff;
+        }
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100dvh;
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Prompt', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-code {
+            font-family: 'JetBrains Mono', monospace;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        input, textarea, select {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        /* กรอบจำลองมือถือเมื่อเปิดบนหน้าจอเดสก์ท็อป และเต็มจอเมื่อเปิดบนมือถือ */
+        #appShell {
+            width: 100%;
+            height: 100dvh;
+            background-color: #000000;
+            color: #ffffff;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        @media (min-width: 640px) {
+            body {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #000000;
+                background-image: radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px);
+                background-size: 24px 24px;
+            }
+            #appShell {
+                width: 420px;
+                max-width: 100vw;
+                height: 92dvh;
+                max-height: 880px;
+                border: 2px solid rgba(255, 255, 255, 0.28);
+                border-radius: 32px;
+                box-shadow: 0 25px 80px rgba(255, 255, 255, 0.08);
+            }
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        .touch-btn {
+            touch-action: none;
+            transition: transform 0.08s ease, background-color 0.08s ease;
+        }
+        .touch-btn:active {
+            transform: scale(0.92);
+        }
+        /* Scrollbar แบบเรียบง่ายสีขาว-ดำ */
+        ::-webkit-scrollbar {
+            width: 3px;
+            height: 3px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.35);
+            border-radius: 99px;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* แอนิเมชันโลโก้หน้าโหลด */
+        @keyframes monoPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.95); opacity: 0.78; }
+        }
+        .animate-mono-pulse {
+            animation: monoPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+
+<div id="appShell">
+
+    <!-- =========================================================================
+         1. หน้าโหลดตอนเปิดแอป (BOOT & FUNCTION LOADING SCREEN)
+         ========================================================================= -->
+    <section id="bootScreen" class="absolute inset-0 z-50 bg-black text-white flex flex-col items-center justify-between px-8 py-12">
+        <div class="w-full flex justify-between items-center text-[10px] tracking-[0.2em] uppercase text-white/50">
+            <span>MONO OS // 2D</span>
+            <span>V 2.0</span>
+        </div>
+
+        <div class="flex flex-col items-center text-center w-full max-w-xs">
+            <!-- โลโก้ MONO ENGINE ลายเส้นขาว-ดำ -->
+            <div class="w-20 h-20 border-2 border-white rounded-2xl flex items-center justify-center mb-6 animate-mono-pulse bg-black">
+                <svg class="w-11 h-11 text-white" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <rect x="6" y="6" width="36" height="36" rx="4"/>
+                    <path d="M14 34V14L24 25L34 14V34"/>
+                    <circle cx="24" cy="34" r="2" fill="currentColor"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold tracking-[0.24em] text-white">MONO ENGINE</h1>
+            <p class="text-[11px] text-white/60 tracking-widest mt-1 mb-10">สตูดิโอสร้างเกม 2D บนมือถือ</p>
+
+            <!-- แถบความคืบหน้า (Progress Bar) -->
+            <div class="w-full h-1.5 bg-white/15 rounded-full overflow-hidden mb-3">
+                <div id="bootProgressBar" class="h-full bg-white transition-all duration-300 ease-out" style="width: 0%;"></div>
+            </div>
+            <div class="w-full flex items-center justify-between text-[11px]">
+                <span id="bootStatusText" class="text-white/80 truncate pr-2">กำลังเริ่มต้นระบบ...</span>
+                <span id="bootPercentText" class="font-code font-semibold text-white shrink-0">0%</span>
+            </div>
+        </div>
+
+        <div class="text-[10px] text-white/40 tracking-wider">
+            MINIMALIST MONOCHROME ARCHITECTURE
+        </div>
+    </section>
+
+    <!-- =========================================================================
+         2. หน้าล็อกอินด้วย GOOGLE (AUTHENTICATION SCREEN)
+         ========================================================================= -->
+    <section id="loginScreen" class="hidden absolute inset-0 z-40 bg-black text-white flex flex-col justify-between px-7 py-10 animate-fade-in">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 border border-white rounded-lg flex items-center justify-center">
+                    <svg class="w-4 h-4" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3">
+                        <path d="M10 38V10L24 25L38 10V38"/>
+                    </svg>
+                </div>
+                <span class="text-sm font-bold tracking-[0.18em]">MONO ENGINE</span>
+            </div>
+            <span class="text-[10px] border border-white/30 px-2 py-0.5 rounded-full text-white/70">2D STUDIO</span>
+        </div>
+
+        <div class="my-auto py-6">
+            <div class="mb-8">
+                <div class="inline-block px-2.5 py-1 border border-white/30 rounded-full text-[10px] tracking-wider uppercase mb-4 text-white/80">
+                    ยินดีต้อนรับนักสร้างเกม
+                </div>
+                <h2 class="text-3xl font-bold leading-snug tracking-tight mb-3">
+                    สร้าง เล่น และแชร์<br>เกม 2D จากมือถือคุณ
+                </h2>
+                <p class="text-xs text-white/65 leading-relaxed">
+                    เข้าสู่ระบบเพื่อบันทึกโปรเจกต์บนคลาวด์ นำเข้าภาพ Asset เขียนโค้ดเกมด้วยตัวเอง และเผยแพร่ให้เพื่อนๆ เล่นในฟีดโซเชียล
+                </p>
+            </div>
+
+            <!-- กล่องแสดง Error หากล็อกอินติดปัญหา (เช่น ป๊อปอัปถูกบล็อกใน iframe) -->
+            <div id="loginErrorBox" class="hidden mb-4 p-3 border border-white/60 bg-white/10 rounded-xl text-[11px] leading-relaxed text-white"></div>
+
+            <!-- ปุ่มหลัก: เข้าสู่ระบบด้วย Google -->
+            <button id="btnGoogleLogin" class="w-full py-3.5 px-4 bg-white text-black font-semibold text-sm rounded-2xl flex items-center justify-center gap-3 hover:bg-white/90 active:scale-[0.98] transition-all border border-white">
+                <!-- ไอคอน Google ลายเส้น/โมโนโครมสีดำ -->
+                <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21.35 11.1H12v2.98h5.36c-.23 1.48-1.69 4.35-5.36 4.35-3.22 0-5.85-2.67-5.85-5.93s2.63-5.93 5.85-5.93c1.83 0 3.06.78 3.76 1.45l2.56-2.47C16.68 4.02 14.55 3 12 3 7.03 3 3 7.03 3 12s4.03 9 9 9c5.2 0 8.65-3.65 8.65-8.8 0-.59-.07-1.04-.15-1.1z"/>
+                </svg>
+                <span id="btnGoogleText">เข้าสู่ระบบด้วย Google</span>
+            </button>
+
+            <div class="flex items-center gap-3 my-4">
+                <div class="h-px flex-1 bg-white/20"></div>
+                <span class="text-[10px] text-white/45">หรือ</span>
+                <div class="h-px flex-1 bg-white/20"></div>
+            </div>
+
+            <!-- ปุ่มรอง: เข้าใช้งานแบบผู้เยี่ยมชม (Guest) -->
+            <button id="btnGuestLogin" class="w-full py-2.5 px-4 bg-black text-white/85 font-medium text-xs rounded-2xl border border-white/30 hover:border-white active:scale-[0.98] transition-all">
+                เข้าใช้งานแบบผู้เยี่ยมชม (Guest)
+            </button>
+        </div>
+
+        <p class="text-[10px] text-white/45 text-center leading-relaxed">
+            เชื่อมต่อความปลอดภัยผ่าน Firebase Authentication<br>
+            รองรับการซิงก์โปรเจกต์เกมและฟีดสาธารณะแบบเรียลไทม์
+        </p>
+    </section>
+
+    <!-- =========================================================================
+         3. หน้าหลักของแอป (MAIN APPLICATION SHELL + 3 TABS)
+         ========================================================================= -->
+    <div id="mainApp" class="hidden flex-1 flex flex-col h-full bg-black text-white overflow-hidden">
+
+        <!-- แถบส่วนหัว (Top Header) -->
+        <header class="h-14 px-4 border-b border-white/15 bg-black flex items-center justify-between shrink-0 z-20">
+            <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 bg-white text-black rounded-lg flex items-center justify-center font-bold text-xs">
+                    M
+                </div>
+                <div>
+                    <h1 id="headerTitle" class="text-sm font-bold tracking-wide leading-tight">เล่นเกม</h1>
+                    <p class="text-[9px] text-white/50 tracking-[0.14em] uppercase">MONO ENGINE</p>
+                </div>
+            </div>
+
+            <!-- ปุ่มโปรไฟล์ผู้ใช้ -->
+            <button id="btnProfile" class="flex items-center gap-2 py-1 pl-1.5 pr-2.5 rounded-full border border-white/25 hover:border-white transition-colors bg-black">
+                <div id="headerAvatar" class="w-6 h-6 rounded-full bg-white text-black text-[11px] font-bold flex items-center justify-center overflow-hidden">
+                    U
+                </div>
+                <span id="headerUserName" class="text-[11px] font-medium max-w-[90px] truncate">ผู้ใช้</span>
+            </button>
+        </header>
+
+        <!-- พื้นที่เนื้อหาหลัก (Scrollable Main Viewport) -->
+        <main class="flex-1 overflow-y-auto relative bg-black">
+
+            <!-- =========================================================
+                 แท็บที่ 1: หน้าเล่นเกม (PLAY TAB)
+                 ========================================================= -->
+            <section id="view-play" class="p-4 space-y-4 pb-20">
+                <!-- ช่องค้นหา -->
+                <div class="relative">
+                    <svg class="w-4 h-4 text-white/50 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+                    </svg>
+                    <input id="playSearchInput" type="text" placeholder="ค้นหาชื่อเกม หรือชื่อผู้สร้าง..." class="w-full bg-black border border-white/25 focus:border-white rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-white/40 focus:outline-none">
+                </div>
+
+                <!-- ตัวกรองหมวดหมู่ -->
+                <div id="playCategoryBar" class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    <button data-cat="all" class="cat-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-black border border-white shrink-0">ทั้งหมด</button>
+                    <button data-cat="platformer" class="cat-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-black text-white/75 border border-white/25 shrink-0">Platformer</button>
+                    <button data-cat="runner" class="cat-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-black text-white/75 border border-white/25 shrink-0">Runner / Dodge</button>
+                    <button data-cat="topdown" class="cat-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-black text-white/75 border border-white/25 shrink-0">Top-Down</button>
+                    <button data-cat="community" class="cat-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-black text-white/75 border border-white/25 shrink-0">จากชุมชน</button>
+                </div>
+
+                <!-- รายการเกม -->
+                <div id="playGamesList" class="space-y-3.5"></div>
+            </section>
+
+            <!-- =========================================================
+                 แท็บที่ 2: หน้าโซเชียล ฟีดแนะนำเกมสไตล์ Instagram (SOCIAL TAB)
+                 ========================================================= -->
+            <section id="view-social" class="hidden pb-20">
+                <div class="px-4 py-2.5 border-b border-white/15 flex items-center justify-between text-[11px] text-white/60">
+                    <span>ฟีดคลิปแนะนำเกม • รับชมคลิปสั้นแล้วกดเล่นทันที</span>
+                    <span id="socialPostCount" class="font-code text-white">0 โพสต์</span>
+                </div>
+                <!-- ฟีดโพสต์แนวตั้ง -->
+                <div id="socialFeedList" class="divide-y divide-white/15"></div>
+            </section>
+
+            <!-- =========================================================
+                 แท็บที่ 3: หน้าสร้างเกม / สตูดิโอรวมโปรเจกต์ (CREATE HUB TAB)
+                 ========================================================= -->
+            <section id="view-create" class="hidden p-4 space-y-4 pb-20">
+                <!-- ปุ่มสร้างโปรเจกต์ใหม่ -->
+                <button id="btnOpenNewProject" class="w-full py-4 px-4 bg-white text-black rounded-2xl flex items-center justify-between border border-white active:scale-[0.99] transition-transform">
+                    <div class="flex items-center gap-3 text-left">
+                        <div class="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold">สร้างโปรเจกต์ใหม่ (+)</div>
+                            <div class="text-[11px] text-black/65">ออกแบบฉาก นำเข้ารูป Asset และเขียนโค้ดเอง</div>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-black/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+
+                <!-- สรุปสถานะโปรเจกต์ -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div class="border border-white/20 rounded-2xl p-3 bg-black">
+                        <div class="text-[10px] text-white/55">โปรเจกต์ทั้งหมด</div>
+                        <div id="statTotalProjects" class="text-xl font-bold mt-0.5">0</div>
+                    </div>
+                    <div class="border border-white/20 rounded-2xl p-3 bg-black">
+                        <div class="text-[10px] text-white/55">เผยแพร่สู่สาธารณะแล้ว</div>
+                        <div id="statPublicProjects" class="text-xl font-bold mt-0.5">0</div>
+                    </div>
+                </div>
+
+                <!-- หัวข้อรายการโปรเจกต์ -->
+                <div class="flex items-center justify-between pt-1">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-white/80">โปรเจกต์ของคุณ</h2>
+                    <span id="cloudSyncBadge" class="text-[10px] text-white/50">ซิงก์อัตโนมัติ</span>
+                </div>
+
+                <!-- รายการการ์ดโปรเจกต์ -->
+                <div id="createProjectsList" class="space-y-3"></div>
+            </section>
+
+        </main>
+
+        <!-- แถบนำทางด้านล่าง 3 หมวดหมู่หลัก (BOTTOM NAVIGATION BAR) -->
+        <nav class="h-16 border-t border-white/20 bg-black grid grid-cols-3 shrink-0 z-20">
+            <button data-tab="play" class="nav-tab flex flex-col items-center justify-center gap-1 text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <rect x="3" y="4" width="18" height="16" rx="3"/>
+                </svg>
+                <span class="text-[10px] font-semibold">เล่นเกม</span>
+            </button>
+            <button data-tab="social" class="nav-tab flex flex-col items-center justify-center gap-1 text-white/45">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="4"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 9h18M9 3v6m6-6v6M10 13l5 3-5 3v-6z"/>
+                </svg>
+                <span class="text-[10px] font-medium">โซเชียล</span>
+            </button>
+            <button data-tab="create" class="nav-tab flex flex-col items-center justify-center gap-1 text-white/45">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="4"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m-4-4h8"/>
+                </svg>
+                <span class="text-[10px] font-medium">สร้างเกม</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- =========================================================================
+         4. หน้าต่างเล่นเกมเต็มจอ (FULLSCREEN GAME PLAYER MODAL)
+         ========================================================================= -->
+    <div id="gamePlayerModal" class="hidden absolute inset-0 z-40 bg-black text-white flex flex-col">
+        <!-- แถบด้านบนของตัวเล่นเกม -->
+        <div class="h-12 px-3 border-b border-white/20 flex items-center justify-between bg-black shrink-0">
+            <div class="flex items-center gap-2 min-w-0">
+                <button id="btnClosePlayer" class="w-8 h-8 rounded-xl border border-white/25 flex items-center justify-center hover:bg-white hover:text-black shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <div class="min-w-0">
+                    <div id="playerGameTitle" class="text-xs font-bold truncate">ชื่อเกม</div>
+                    <div id="playerGameAuthor" class="text-[10px] text-white/55 truncate">โดย ผู้สร้าง</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <div class="px-2.5 py-1 border border-white/30 rounded-lg text-xs font-code">
+                    คะแนน: <span id="playerScoreDisplay" class="font-bold">0</span>
+                </div>
+                <button id="btnRestartPlayer" class="px-2.5 py-1 bg-white text-black text-[11px] font-semibold rounded-lg">
+                    เริ่มใหม่
+                </button>
+            </div>
+        </div>
+
+        <!-- พื้นที่หน้าจอเกม 2D Canvas -->
+        <div class="relative flex-1 bg-black overflow-hidden">
+            <canvas id="playerCanvas" class="w-full h-full"></canvas>
+
+            <!-- โอเวอร์เลย์เมื่อชนะหรือจบเกม -->
+            <div id="playerEndOverlay" class="hidden absolute inset-0 bg-black/85 flex flex-col items-center justify-center p-6 text-center z-20">
+                <div id="playerEndBadge" class="text-[10px] uppercase tracking-[0.2em] border border-white px-3 py-1 rounded-full mb-3">STATUS</div>
+                <h3 id="playerEndTitle" class="text-2xl font-bold mb-1">จบเกม</h3>
+                <p id="playerEndDesc" class="text-xs text-white/70 mb-5">คะแนนของคุณ: 0</p>
+                <div class="flex gap-2.5">
+                    <button id="btnOverlayRestart" class="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl">เล่นอีกครั้ง</button>
+                    <button id="btnOverlayExit" class="px-5 py-2.5 bg-black text-white border border-white/40 font-medium text-xs rounded-xl">กลับหน้าหลัก</button>
+                </div>
+            </div>
+
+            <!-- ปุ่มควบคุมสัมผัสบนหน้าจอมือถือ (Virtual Touch Controls) -->
+            <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between pointer-events-none z-10">
+                <!-- D-Pad ซ้าย/ขวา/ขึ้น/ลง -->
+                <div class="grid grid-cols-3 gap-1.5 w-36 h-36 pointer-events-auto">
+                    <div></div>
+                    <button id="padUp" class="touch-btn rounded-xl bg-black/75 border border-white/50 text-white flex items-center justify-center active:bg-white active:text-black">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                    <div></div>
+                    <button id="padLeft" class="touch-btn rounded-xl bg-black/75 border border-white/50 text-white flex items-center justify-center active:bg-white active:text-black">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    </button>
+                    <div class="rounded-lg border border-white/15 bg-black/40"></div>
+                    <button id="padRight" class="touch-btn rounded-xl bg-black/75 border border-white/50 text-white flex items-center justify-center active:bg-white active:text-black">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    </button>
+                    <div></div>
+                    <button id="padDown" class="touch-btn rounded-xl bg-black/75 border border-white/50 text-white flex items-center justify-center active:bg-white active:text-black">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div></div>
+                </div>
+
+                <!-- ปุ่ม Action และ Jump -->
+                <div class="flex items-end gap-2.5 pb-1 pointer-events-auto">
+                    <button id="padAction" class="touch-btn w-14 h-14 rounded-full bg-black/80 border-2 border-white/70 text-white font-bold text-[11px] flex items-center justify-center active:bg-white active:text-black">
+                        แอ็กชัน
+                    </button>
+                    <button id="padJump" class="touch-btn w-16 h-16 rounded-full bg-white text-black border-2 border-white font-bold text-xs flex items-center justify-center active:bg-black active:text-white">
+                        กระโดด
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         5. เครื่องมือสร้างเกม 2D (GAME STUDIO EDITOR MODAL)
+         ========================================================================= -->
+    <div id="studioModal" class="hidden absolute inset-0 z-40 bg-black text-white flex flex-col">
+        <!-- แถบเครื่องมือด้านบนของ Studio -->
+        <header class="h-12 px-2.5 border-b border-white/20 flex items-center justify-between gap-1.5 bg-black shrink-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+                <button id="btnExitStudio" class="w-8 h-8 rounded-xl border border-white/25 flex items-center justify-center hover:bg-white hover:text-black shrink-0" title="กลับหน้ารวมโปรเจกต์">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <div class="min-w-0">
+                    <input id="studioTitleInput" type="text" class="bg-transparent text-xs font-bold text-white focus:outline-none border-b border-transparent focus:border-white/50 w-28 truncate" value="โปรเจกต์">
+                    <div id="studioStatusLabel" class="text-[9px] text-white/55">ส่วนตัว (Draft)</div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1 shrink-0">
+                <button id="btnStudioGrid" class="px-2 py-1.5 rounded-lg border border-white text-[10px] font-semibold bg-white text-black" title="Grid Snap">Grid</button>
+                <button id="btnStudioSave" class="px-2.5 py-1.5 rounded-lg border border-white/40 text-[10px] font-semibold hover:border-white">บันทึก</button>
+                <button id="btnStudioPlaytest" class="px-3 py-1.5 rounded-lg bg-white text-black text-[10px] font-bold flex items-center gap-1">
+                    <span id="playtestBtnLabel">▶ ทดสอบ</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- พื้นที่ฉาก 2D Canvas Stage -->
+        <div class="relative flex-1 bg-black overflow-hidden border-b border-white/20">
+            <canvas id="studioCanvas" class="w-full h-full"></canvas>
+
+            <!-- ปุ่มเครื่องมือลอยในโหมด Edit -->
+            <div id="studioEditOverlay" class="absolute top-2 left-2 right-2 flex justify-between items-start pointer-events-none">
+                <div class="flex gap-1.5 pointer-events-auto">
+                    <button id="btnStudioResetCam" class="px-2.5 py-1 rounded-full bg-black/85 border border-white/30 text-[10px] text-white">รีเซ็ตกล้อง</button>
+                    <button id="btnStudioPublishQuick" class="px-2.5 py-1 rounded-full bg-black/85 border border-white/30 text-[10px] text-white">เผยแพร่</button>
+                </div>
+                <div id="studioCoordBadge" class="px-2 py-1 rounded-full bg-black/85 border border-white/20 text-[10px] font-code text-white/80">
+                    X:0 Y:0
+                </div>
+            </div>
+
+            <!-- คำแนะนำสั้นๆ ใต้ Canvas -->
+            <div id="studioHintBar" class="absolute bottom-1.5 left-2 right-2 text-center pointer-events-none">
+                <span class="inline-block px-2.5 py-0.5 rounded-full bg-black/85 border border-white/15 text-[9px] text-white/65">
+                    แตะเลือกวัตถุ • ลากเพื่อย้าย • ลากมุมขวาล่างเพื่อปรับขนาด • ลากที่ว่างเลื่อนกล้อง
+                </span>
+            </div>
+
+            <!-- โอเวอร์เลย์ขณะ Playtest (คะแนน + คอนโซล + จอยสัมผัส) -->
+            <div id="studioPlaytestHud" class="hidden absolute inset-0 pointer-events-none flex flex-col justify-between p-2.5">
+                <div class="flex justify-between items-start">
+                    <div class="px-2.5 py-1 rounded-lg bg-black/85 border border-white/40 text-xs font-code">
+                        คะแนน: <span id="studioPlayScore" class="font-bold">0</span>
+                    </div>
+                    <div class="flex gap-1.5 pointer-events-auto">
+                        <button id="btnToggleConsole" class="px-2.5 py-1 rounded-lg bg-black/85 border border-white/40 text-[10px] font-code">
+                            Console (<span id="consoleCountBadge">0</span>)
+                        </button>
+                        <button id="btnRestartPlaytest" class="px-2.5 py-1 rounded-lg bg-white text-black text-[10px] font-bold">
+                            เริ่มใหม่
+                        </button>
+                    </div>
+                </div>
+
+                <!-- แผง Console แสดง Log/Error ขณะทดสอบ -->
+                <div id="studioConsoleDrawer" class="hidden pointer-events-auto my-2 max-h-32 overflow-y-auto bg-black/95 border border-white/50 rounded-xl p-2 font-code text-[10px] space-y-1">
+                    <div class="flex justify-between items-center border-b border-white/20 pb-1 mb-1">
+                        <span class="font-bold text-white">JS RUNTIME CONSOLE</span>
+                        <button id="btnClearConsole" class="text-white/60 underline">ล้าง</button>
+                    </div>
+                    <div id="studioConsoleLines" class="space-y-0.5 text-white/85"></div>
+                </div>
+
+                <!-- ปุ่มควบคุม Playtest -->
+                <div class="flex items-end justify-between">
+                    <div class="grid grid-cols-3 gap-1 w-32 h-32 pointer-events-auto">
+                        <div></div>
+                        <button id="stPadUp" class="touch-btn rounded-lg bg-black/75 border border-white/50 flex items-center justify-center active:bg-white active:text-black">▲</button>
+                        <div></div>
+                        <button id="stPadLeft" class="touch-btn rounded-lg bg-black/75 border border-white/50 flex items-center justify-center active:bg-white active:text-black">◀</button>
+                        <div></div>
+                        <button id="stPadRight" class="touch-btn rounded-lg bg-black/75 border border-white/50 flex items-center justify-center active:bg-white active:text-black">▶</button>
+                        <div></div>
+                        <button id="stPadDown" class="touch-btn rounded-lg bg-black/75 border border-white/50 flex items-center justify-center active:bg-white active:text-black">▼</button>
+                        <div></div>
+                    </div>
+                    <div class="flex items-end gap-2 pointer-events-auto">
+                        <button id="stPadAction" class="touch-btn w-12 h-12 rounded-full bg-black/80 border border-white text-[10px] font-bold active:bg-white active:text-black">ยิง/ใช้</button>
+                        <button id="stPadJump" class="touch-btn w-14 h-14 rounded-full bg-white text-black font-bold text-[11px] active:bg-black active:text-white border border-white">กระโดด</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- แผงควบคุมด้านล่างของ Studio (5 แท็บ: Assets, Inspector, Blocks, Code, Export) -->
+        <div id="studioDrawer" class="h-[44%] bg-black flex flex-col shrink-0">
+            <!-- แถบเลือกแท็บเครื่องมือ -->
+            <div class="flex border-b border-white/20 overflow-x-auto no-scrollbar shrink-0">
+                <button data-stab="assets" class="studio-tab px-3 py-2.5 text-[11px] font-bold border-b-2 border-white text-white shrink-0">คลัง Asset</button>
+                <button data-stab="inspector" class="studio-tab px-3 py-2.5 text-[11px] font-medium border-b-2 border-transparent text-white/50 shrink-0">คุณสมบัติ</button>
+                <button data-stab="blocks" class="studio-tab px-3 py-2.5 text-[11px] font-medium border-b-2 border-transparent text-white/50 shrink-0">บล็อกโค้ด</button>
+                <button data-stab="code" class="studio-tab px-3 py-2.5 text-[11px] font-medium border-b-2 border-transparent text-white/50 shrink-0">โค้ด JS</button>
+                <button data-stab="export" class="studio-tab px-3 py-2.5 text-[11px] font-medium border-b-2 border-transparent text-white/50 shrink-0">ส่งออก</button>
+            </div>
+
+            <!-- เนื้อหาของแต่ละแท็บใน Studio -->
+            <div class="flex-1 overflow-y-auto p-3 text-xs">
+
+                <!-- 5.1 แท็บคลัง Asset (นำเข้ารูปภายนอก + Asset สำเร็จรูป) -->
+                <div id="stab-assets" class="space-y-3">
+                    <!-- นำเข้าจากภายนอก -->
+                    <div class="border border-white/25 rounded-xl p-2.5 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold">นำเข้า Asset จากภายนอก</span>
+                            <span class="text-[9px] text-white/50">PNG / JPG / WEBP</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer py-2 px-2.5 bg-white text-black font-semibold text-[11px] rounded-xl text-center block">
+                                + อัปโหลดรูป Sprite
+                                <input id="uploadSpriteInput" type="file" accept="image/*" class="hidden">
+                            </label>
+                            <label class="cursor-pointer py-2 px-2.5 bg-black text-white border border-white/40 font-medium text-[11px] rounded-xl text-center block">
+                                + ภาพพื้นหลังฉาก
+                                <input id="uploadBgInput" type="file" accept="image/*" class="hidden">
+                            </label>
+                        </div>
+                        <!-- แสดงรูปที่ผู้ใช้นำเข้าไว้ในโปรเจกต์ -->
+                        <div id="customAssetsWrap" class="hidden pt-1 border-t border-white/15">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[10px] text-white/60">รูปที่นำเข้าแล้ว (แตะเพื่อวางในฉาก)</span>
+                                <button id="btnClearBg" class="text-[10px] text-white/60 underline hidden">ลบพื้นหลัง</button>
+                            </div>
+                            <div id="customAssetsGrid" class="flex gap-2 overflow-x-auto pb-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- คลัง Asset สำเร็จรูป -->
+                    <div>
+                        <div class="text-[11px] font-bold mb-2">Asset สำเร็จรูป (แตะเพื่อวางลงฉาก)</div>
+                        <div id="presetAssetsGrid" class="grid grid-cols-4 gap-2"></div>
+                    </div>
+
+                    <!-- รายชื่อวัตถุทั้งหมดในฉาก -->
+                    <div class="pt-2 border-t border-white/15">
+                        <div class="text-[11px] font-bold mb-1.5">วัตถุทั้งหมดในฉาก (<span id="studioObjCount">0</span>)</div>
+                        <div id="studioHierarchyList" class="space-y-1.5"></div>
+                    </div>
+                </div>
+
+                <!-- 5.2 แท็บคุณสมบัติวัตถุ (Inspector) -->
+                <div id="stab-inspector" class="hidden space-y-3">
+                    <div id="inspEmptyState" class="py-8 text-center text-white/50 text-xs">
+                        แตะเลือกวัตถุบนหน้าจอฉาก หรือเลือกจากแท็บ "คลัง Asset" เพื่อปรับแต่งคุณสมบัติ
+                    </div>
+                    <div id="inspForm" class="hidden space-y-2.5">
+                        <div class="flex items-center gap-1.5">
+                            <input id="inspName" type="text" class="flex-1 bg-black border border-white/35 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white" placeholder="ชื่อวัตถุ">
+                            <button id="btnDupObj" class="px-2.5 py-1.5 border border-white/35 rounded-xl text-[11px]">คัดลอก</button>
+                            <button id="btnDelObj" class="px-2.5 py-1.5 bg-white text-black font-bold rounded-xl text-[11px]">ลบ</button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-1">บทบาท (Role)</label>
+                                <select id="inspRole" class="w-full bg-black border border-white/35 rounded-xl px-2 py-1.5 text-xs text-white">
+                                    <option value="player_platformer">Player (Platformer)</option>
+                                    <option value="player_topdown">Player (Top-Down)</option>
+                                    <option value="solid">Solid / พื้นกำแพง</option>
+                                    <option value="coin">Coin / เหรียญคะแนน</option>
+                                    <option value="enemy">Enemy / ศัตรู</option>
+                                    <option value="bouncy">Bouncy / แท่นเด้ง</option>
+                                    <option value="goal">Goal / เส้นชัย</option>
+                                    <option value="decoration">Decoration / ตกแต่ง</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-1">สีวัตถุ / รูป Sprite</label>
+                                <div class="flex gap-1.5 items-center">
+                                    <input id="inspColor" type="color" class="w-10 h-8 bg-black border border-white/35 rounded-lg cursor-pointer">
+                                    <label class="flex-1 cursor-pointer py-1.5 px-2 border border-white/35 rounded-lg text-[10px] text-center truncate">
+                                        เปลี่ยนรูป
+                                        <input id="inspUploadSprite" type="file" accept="image/*" class="hidden">
+                                    </label>
+                                    <button id="btnClearObjSprite" class="px-2 py-1.5 border border-white/25 rounded-lg text-[10px]" title="ลบรูปออก">✕</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-1.5">
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">X</label>
+                                <input id="inspX" type="number" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">Y</label>
+                                <input id="inspY" type="number" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">กว้าง</label>
+                                <input id="inspW" type="number" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">สูง</label>
+                                <input id="inspH" type="number" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-1.5 pt-1 border-t border-white/15">
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">ความเร็ว</label>
+                                <input id="inspSpeed" type="number" step="0.5" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">แรงกระโดด</label>
+                                <input id="inspJump" type="number" step="0.5" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-white/55 mb-0.5">แรงโน้มถ่วง</label>
+                                <input id="inspGravity" type="number" step="0.05" class="w-full bg-black border border-white/30 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5.3 แท็บบล็อกโค้ดสำเร็จรูป (Visual Block Coding) -->
+                <div id="stab-blocks" class="hidden space-y-2.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <div class="text-xs font-bold">บล็อกคำสั่งสำเร็จรูป</div>
+                            <div class="text-[10px] text-white/55">สร้างกติกาเกมโดยไม่ต้องเขียนโค้ด</div>
+                        </div>
+                        <div class="flex gap-1">
+                            <button id="btnAddCollisionBlock" class="px-2.5 py-1.5 bg-white text-black font-bold text-[10px] rounded-xl">+ บล็อกชนกัน</button>
+                            <button id="btnAddActionBlock" class="px-2.5 py-1.5 border border-white/40 text-white text-[10px] rounded-xl">+ บล็อกพฤติกรรม</button>
+                        </div>
+                    </div>
+                    <div id="blocksListContainer" class="space-y-2"></div>
+                </div>
+
+                <!-- 5.4 แท็บเขียน/ปรับแก้โค้ด JavaScript เอง (Custom Code Editor) -->
+                <div id="stab-code" class="hidden space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-1.5">
+                        <div class="text-xs font-bold">JavaScript Code Editor</div>
+                        <div class="flex gap-1.5">
+                            <button id="btnGenCodeFromBlocks" class="px-2 py-1 border border-white/40 rounded-lg text-[10px] hover:border-white">ดูโค้ดจากบล็อก</button>
+                            <button id="btnToggleApiDocs" class="px-2 py-1 bg-white text-black font-semibold rounded-lg text-[10px]">คู่มือ API</button>
+                        </div>
+                    </div>
+
+                    <!-- คู่มือคำสั่ง API แบบย่อ -->
+                    <div id="apiDocsPanel" class="hidden border border-white/30 rounded-xl p-2.5 bg-white/5 text-[10px] font-code space-y-1 text-white/85">
+                        <div class="font-bold text-white mb-1">// ฟังก์ชันที่เอนจิ้นเรียกใช้อัตโนมัติ</div>
+                        <div>• onStart(api) — ทำงานครั้งเดียวตอนเริ่มเกม</div>
+                        <div>• onUpdate(api, dt) — ทำงานทุกเฟรม (60 FPS)</div>
+                        <div>• onCollision(api, a, b) — ทำงานเมื่อวัตถุ a ชน b</div>
+                        <div class="font-bold text-white pt-1">// คำสั่ง api ที่ใช้ได้</div>
+                        <div>• api.player / api.objects / api.find('ชื่อ')</div>
+                        <div>• api.input ({ left, right, up, down, jump, action })</div>
+                        <div>• api.addScore(10) / api.playSound('coin'|'jump'|'shoot')</div>
+                        <div>• api.spawnBullet(x, y, vx, vy, '#fff')</div>
+                        <div>• api.win('ข้อความ') / api.gameOver('ข้อความ') / api.log(...)</div>
+                    </div>
+
+                    <!-- กล่องพิมพ์โค้ด JS -->
+                    <textarea id="customCodeEditor" rows="9" spellcheck="false" class="w-full bg-black border border-white/40 focus:border-white rounded-xl p-2.5 font-code text-[11px] leading-relaxed text-white focus:outline-none"></textarea>
+
+                    <!-- กล่องแสดงสถานะ/Error ของโค้ดในหน้า Editor -->
+                    <div id="codeInlineConsole" class="border border-white/20 rounded-xl p-2 font-code text-[10px] text-white/70 bg-white/5">
+                        พร้อมรันโค้ด • กดปุ่ม "▶ ทดสอบ" ด้านบนเพื่อรันเกมและตรวจสอบ Console
+                    </div>
+                </div>
+
+                <!-- 5.5 แท็บส่งออกและเผยแพร่ (Export & Publish) -->
+                <div id="stab-export" class="hidden space-y-3">
+                    <div class="border border-white/25 rounded-xl p-3 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-bold">สถานะการเผยแพร่</div>
+                                <div id="exportStatusDesc" class="text-[10px] text-white/60">ปัจจุบันเป็นฉบับร่างส่วนตัว</div>
+                            </div>
+                            <button id="btnExportTogglePublish" class="px-3 py-1.5 bg-white text-black font-bold text-[11px] rounded-xl">
+                                เผยแพร่สู่สาธารณะ
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="border border-white/25 rounded-xl p-3 space-y-2">
+                        <div class="text-xs font-bold">ส่งออกไฟล์เกมเดี่ยว (.HTML)</div>
+                        <p class="text-[10px] text-white/60 leading-relaxed">
+                            รวมฉาก รูปภาพ Asset ที่นำเข้า บล็อกโค้ด และโค้ด JavaScript ของคุณเป็นไฟล์เกม .html ไฟล์เดียวที่เปิดเล่นบนมือถือได้ทันที
+                        </p>
+                        <button id="btnDownloadStandalone" class="w-full py-2.5 bg-white text-black font-bold text-xs rounded-xl">
+                            ดาวน์โหลดไฟล์เกม (.html)
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         6. โมดอลเสริมต่างๆ (สร้างโปรเจกต์ใหม่ / โปรไฟล์ / คอมเมนต์ / ยืนยันการลบ)
+         ========================================================================= -->
+
+    <!-- โมดอลสร้างโปรเจกต์ใหม่ -->
+    <div id="newProjectModal" class="hidden absolute inset-0 z-50 bg-black/85 flex items-center justify-center p-5">
+        <div class="w-full max-w-sm bg-black border border-white rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold">สร้างโปรเจกต์เกมใหม่</h3>
+                <button id="btnCloseNewProj" class="text-white/60 hover:text-white text-sm">✕</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-[11px] text-white/70 mb-1">ชื่อเกมของคุณ</label>
+                    <input id="newProjName" type="text" placeholder="เช่น นักรบพิกเซล 2D" class="w-full bg-black border border-white/40 focus:border-white rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-white/70 mb-1.5">เลือกเทมเพลตเริ่มต้น</label>
+                    <div class="grid grid-cols-3 gap-2" id="templateChoices">
+                        <button data-tpl="platformer" class="tpl-choice p-2.5 rounded-xl border border-white bg-white text-black text-center">
+                            <div class="text-xs font-bold">Platformer</div>
+                            <div class="text-[9px] opacity-70 mt-0.5">กระโดดด่าน</div>
+                        </button>
+                        <button data-tpl="topdown" class="tpl-choice p-2.5 rounded-xl border border-white/30 bg-black text-white text-center">
+                            <div class="text-xs font-bold">Top-Down</div>
+                            <div class="text-[9px] opacity-70 mt-0.5">เดิน 4 ทิศ</div>
+                        </button>
+                        <button data-tpl="empty" class="tpl-choice p-2.5 rounded-xl border border-white/30 bg-black text-white text-center">
+                            <div class="text-xs font-bold">ฉากว่าง</div>
+                            <div class="text-[9px] opacity-70 mt-0.5">เริ่มจากศูนย์</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <button id="btnConfirmCreateProj" class="w-full py-2.5 bg-white text-black font-bold text-xs rounded-xl">
+                สร้างและเปิดสตูดิโอ
+            </button>
+        </div>
+    </div>
+
+    <!-- โมดอลโปรไฟล์และออกจากระบบ -->
+    <div id="profileModal" class="hidden absolute inset-0 z-50 bg-black/85 flex items-center justify-center p-5">
+        <div class="w-full max-w-xs bg-black border border-white rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold">บัญชีผู้ใช้</h3>
+                <button id="btnCloseProfile" class="text-white/60 hover:text-white text-sm">✕</button>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="profileModalAvatar" class="w-12 h-12 rounded-full bg-white text-black font-bold text-lg flex items-center justify-center overflow-hidden shrink-0">U</div>
+                <div class="min-w-0">
+                    <div id="profileModalName" class="text-sm font-bold truncate">ผู้ใช้งาน</div>
+                    <div id="profileModalProvider" class="text-[10px] text-white/60">Google Account</div>
+                </div>
+            </div>
+            <div class="border border-white/20 rounded-xl p-2.5 text-[10px] font-code text-white/70 break-all">
+                <div class="text-white/45 mb-0.5">USER ID:</div>
+                <div id="profileModalUid">-</div>
+            </div>
+            <button id="btnSignOut" class="w-full py-2.5 bg-white text-black font-bold text-xs rounded-xl">
+                ออกจากระบบ
+            </button>
+        </div>
+    </div>
+
+    <!-- โมดอลคอมเมนต์ของฟีดโซเชียล -->
+    <div id="commentsModal" class="hidden absolute inset-0 z-50 bg-black/85 flex items-end justify-center">
+        <div class="w-full bg-black border-t border-white rounded-t-3xl p-4 max-h-[70%] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-white/15">
+                <h3 id="commentsModalTitle" class="text-xs font-bold">ความคิดเห็น</h3>
+                <button id="btnCloseComments" class="text-white/60 text-sm px-2">✕</button>
+            </div>
+            <div id="commentsList" class="flex-1 overflow-y-auto py-3 space-y-2.5 text-xs"></div>
+            <div class="flex gap-2 pt-2 border-t border-white/15">
+                <input id="commentInput" type="text" placeholder="เขียนความคิดเห็นถึงเกมนี้..." class="flex-1 bg-black border border-white/35 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white">
+                <button id="btnSendComment" class="px-4 py-2 bg-white text-black font-bold text-xs rounded-xl">ส่ง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- โมดอลยืนยันการลบ (แทน window.confirm) -->
+    <div id="confirmModal" class="hidden absolute inset-0 z-50 bg-black/85 flex items-center justify-center p-5">
+        <div class="w-full max-w-xs bg-black border border-white rounded-2xl p-5 space-y-4 text-center">
+            <h3 id="confirmTitle" class="text-sm font-bold">ยืนยันการทำรายการ</h3>
+            <p id="confirmMessage" class="text-xs text-white/70 leading-relaxed">ต้องการลบโปรเจกต์นี้ใช่หรือไม่?</p>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="btnConfirmCancel" class="py-2 border border-white/40 rounded-xl text-xs">ยกเลิก</button>
+                <button id="btnConfirmOk" class="py-2 bg-white text-black font-bold rounded-xl text-xs">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- กล่องแจ้งเตือน Toast โทนขาว-ดำ -->
+    <div id="toastEl" class="hidden absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-white text-black text-[11px] font-semibold shadow-2xl border border-black whitespace-nowrap max-w-[90%] truncate">
+        แจ้งเตือน
+    </div>
+
+</div>
+
+<!-- =========================================================================
+     FIREBASE & MONO ENGINE CORE JAVASCRIPT MODULE
+     ========================================================================= -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithCustomToken,
+    signInAnonymously,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import {
+    getFirestore,
+    doc,
+    setDoc,
+    deleteDoc,
+    onSnapshot,
+    collection
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+/**
+ * ============================================================================
+ * 1. FIREBASE INITIALIZATION & GLOBAL STATE
+ * ============================================================================
+ */
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'mono-engine-2d';
+let fbApp = null;
+let auth = null;
+let db = null;
+let firebaseReady = false;
+
+try {
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        const cfg = JSON.parse(__firebase_config);
+        fbApp = initializeApp(cfg);
+        auth = getAuth(fbApp);
+        db = getFirestore(fbApp);
+        firebaseReady = true;
+    }
+} catch (err) {
+    console.warn('Firebase init fallback (Offline/Preview mode):', err);
+}
+
+const state = {
+    user: null,             // { uid, displayName, photoURL, provider }
+    activeTab: 'play',      // 'play' | 'social' | 'create'
+    playCategory: 'all',
+    playSearch: '',
+    userProjects: [],       // โปรเจกต์ของผู้ใช้ (จาก Firestore + in-memory)
+    publicGames: [],        // เกมสาธารณะจากชุมชน (จาก Firestore)
+    likesMap: {},           // เก็บสถานะถูกใจในเซสชัน
+    commentsMap: {},        // เก็บคอมเมนต์แต่ละเกม
+    activeCommentGameId: null,
+    unsubUserProjects: null,
+    unsubPublicGames: null,
+    confirmCallback: null
+};
+
+// ระบบเสียงสังเคราะห์อย่างง่ายด้วย Tone.js
+let toneSynth = null;
+function playSfx(type) {
+    try {
+        if (typeof Tone === 'undefined') return;
+        if (Tone.context.state !== 'running') Tone.start();
+        if (!toneSynth) toneSynth = new Tone.Synth().toDestination();
+        if (type === 'jump') toneSynth.triggerAttackRelease('C5', '16n');
+        else if (type === 'coin') toneSynth.triggerAttackRelease('E6', '16n');
+        else if (type === 'shoot') toneSynth.triggerAttackRelease('G4', '32n');
+        else if (type === 'hit') toneSynth.triggerAttackRelease('A2', '8n');
+        else if (type === 'bounce') toneSynth.triggerAttackRelease('A5', '8n');
+        else if (type === 'win') toneSynth.triggerAttackRelease('C6', '4n');
+    } catch (_) {}
+}
+
+// แสดง Toast แจ้งเตือน (ไม่ใช้ alert)
+function showToast(msg) {
+    const el = document.getElementById('toastEl');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.add('hidden'), 2400);
+}
+
+// โมดอลยืนยัน (ไม่ใช้ confirm)
+function openConfirm(title, message, onOk) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    state.confirmCallback = onOk;
+    document.getElementById('confirmModal').classList.remove('hidden');
+}
+
+document.getElementById('btnConfirmCancel').onclick = () => {
+    document.getElementById('confirmModal').classList.add('hidden');
+    state.confirmCallback = null;
+};
+document.getElementById('btnConfirmOk').onclick = () => {
+    document.getElementById('confirmModal').classList.add('hidden');
+    if (state.confirmCallback) state.confirmCallback();
+    state.confirmCallback = null;
+};
+
+/**
+ * ============================================================================
+ * 2. PRESET SPRITE LIBRARY (SVG DATA URLS) & BUILT-IN SAMPLE GAMES
+ * ============================================================================
+ */
+function svgToDataUrl(svgStr) {
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr.trim());
+}
+
+// คลัง Asset สำเร็จรูป (สร้างเป็น SVG คมชัด สามารถแสดงสีภายในเกมได้)
+const PRESET_ASSETS = [
+    {
+        id: 'hero_bot', label: 'หุ่นยนต์', role: 'player_platformer', w: 36, h: 36, color: '#38bdf8',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="6" y="8" width="28" height="24" rx="6" fill="#38bdf8" stroke="#0f172a" stroke-width="2"/><rect x="11" y="14" width="18" height="8" rx="3" fill="#0f172a"/><circle cx="16" cy="18" r="2.2" fill="#facc15"/><circle cx="24" cy="18" r="2.2" fill="#facc15"/><line x1="20" y1="8" x2="20" y2="3" stroke="#fff" stroke-width="2"/><circle cx="20" cy="3" r="2" fill="#f43f5e"/><rect x="11" y="32" width="6" height="5" rx="2" fill="#94a3b8"/><rect x="23" y="32" width="6" height="5" rx="2" fill="#94a3b8"/></svg>`)
+    },
+    {
+        id: 'ship', label: 'ยานอวกาศ', role: 'player_topdown', w: 38, h: 38, color: '#60a5fa',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><polygon points="20,4 35,34 20,27 5,34" fill="#60a5fa" stroke="#ffffff" stroke-width="2"/><circle cx="20" cy="18" r="4" fill="#fef08a"/></svg>`)
+    },
+    {
+        id: 'brick', label: 'บล็อกพื้น', role: 'solid', w: 120, h: 24, color: '#475569',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 24"><rect width="80" height="24" rx="4" fill="#475569"/><rect x="2" y="2" width="76" height="6" rx="2" fill="#64748b"/><line x1="20" y1="0" x2="20" y2="24" stroke="#1e293b" stroke-width="2"/><line x1="40" y1="0" x2="40" y2="24" stroke="#1e293b" stroke-width="2"/><line x1="60" y1="0" x2="60" y2="24" stroke="#1e293b" stroke-width="2"/></svg>`)
+    },
+    {
+        id: 'coin', label: 'เหรียญทอง', role: 'coin', w: 26, h: 26, color: '#facc15',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#facc15" stroke="#ca8a04" stroke-width="2.5"/><circle cx="16" cy="16" r="8" fill="none" stroke="#fef08a" stroke-width="2"/><text x="16" y="21" text-anchor="middle" font-size="13" font-weight="bold" fill="#854d0e">$</text></svg>`)
+    },
+    {
+        id: 'slime', label: 'ศัตรู', role: 'enemy', w: 34, h: 34, color: '#f43f5e',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M6 32 C6 12, 34 12, 34 32 Z" fill="#f43f5e" stroke="#881337" stroke-width="2"/><circle cx="15" cy="22" r="3" fill="#fff"/><circle cx="25" cy="22" r="3" fill="#fff"/><circle cx="16" cy="22" r="1.5" fill="#000"/><circle cx="24" cy="22" r="1.5" fill="#000"/></svg>`)
+    },
+    {
+        id: 'spike', label: 'หนามอันตราย', role: 'enemy', w: 36, h: 24, color: '#ef4444',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 28"><polygon points="4,26 12,4 20,26" fill="#ef4444" stroke="#fff" stroke-width="1.5"/><polygon points="18,26 26,4 34,26" fill="#ef4444" stroke="#fff" stroke-width="1.5"/><polygon points="32,26 40,4 46,26" fill="#ef4444" stroke="#fff" stroke-width="1.5"/></svg>`)
+    },
+    {
+        id: 'spring', label: 'แท่นเด้ง', role: 'bouncy', w: 40, h: 24, color: '#ec4899',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 26"><rect x="4" y="4" width="36" height="9" rx="4" fill="#ec4899"/><path d="M10 13 L34 18 L10 23" fill="none" stroke="#f8fafc" stroke-width="3"/></svg>`)
+    },
+    {
+        id: 'portal', label: 'เส้นชัย', role: 'goal', w: 38, h: 46, color: '#10b981',
+        sprite: svgToDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 48"><rect x="6" y="4" width="28" height="40" rx="14" fill="#064e3b" stroke="#10b981" stroke-width="3"/><ellipse cx="20" cy="24" rx="8" ry="13" fill="#34d399"/><circle cx="20" cy="24" r="4" fill="#ffffff"/></svg>`)
+    }
+];
+
+function getPresetSprite(id) {
+    const found = PRESET_ASSETS.find(a => a.id === id);
+    return found ? found.sprite : null;
+}
+
+// เกมตัวอย่าง 3 เกมที่เล่นได้จริง (Platformer, Runner/Dodge, Top-Down)
+const BUILTIN_GAMES = [
+    {
+        id: 'builtin_platformer',
+        name: 'Cyber Hopper 2D',
+        authorName: 'MONO Official',
+        authorId: 'mono_official',
+        category: 'platformer',
+        isPublic: true,
+        isBuiltin: true,
+        caption: 'กระโดดข้ามแท่นลอยฟ้า เก็บเหรียญทอง และหลบหุ่นศัตรูเพื่อไปให้ถึงประตูวาร์ป! สร้างทั้งหมดใน MONO ENGINE',
+        likes: 248,
+        updatedAt: Date.now() - 3600000 * 5,
+        bgColor: '#0b1120',
+        bgImage: '',
+        customAssets: [],
+        objects: [
+            { id: 'p1', name: 'Player', role: 'player_platformer', x: 40, y: 200, w: 36, h: 36, color: '#38bdf8', sprite: getPresetSprite('hero_bot'), speed: 4.4, jumpForce: 11.2, gravity: 0.54 },
+            { id: 'g1', name: 'Ground1', role: 'solid', x: 0, y: 290, w: 420, h: 30, color: '#334155', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'g2', name: 'Plat1', role: 'solid', x: 140, y: 215, w: 110, h: 22, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'b1', name: 'Spring', role: 'bouncy', x: 290, y: 266, w: 42, h: 24, color: '#ec4899', sprite: getPresetSprite('spring'), speed: 0, jumpForce: 15.5, gravity: 0 },
+            { id: 'g3', name: 'Plat2', role: 'solid', x: 350, y: 150, w: 220, h: 24, color: '#334155', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'e1', name: 'Slime1', role: 'enemy', x: 190, y: 256, w: 34, h: 34, color: '#f43f5e', sprite: getPresetSprite('slime'), speed: 2.1, jumpForce: 0, gravity: 0 },
+            { id: 'c1', name: 'Coin1', role: 'coin', x: 180, y: 175, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'c2', name: 'Coin2', role: 'coin', x: 390, y: 110, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'c3', name: 'Coin3', role: 'coin', x: 450, y: 110, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'goal1', name: 'Portal', role: 'goal', x: 520, y: 104, w: 38, h: 46, color: '#10b981', sprite: getPresetSprite('portal'), speed: 0, jumpForce: 0, gravity: 0 }
+        ],
+        blocks: [
+            { id: 'blk1', type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true },
+            { id: 'blk2', type: 'collision', roleA: 'player', roleB: 'enemy', action: 'game_over', enabled: true },
+            { id: 'blk3', type: 'collision', roleA: 'player', roleB: 'goal', action: 'win_game', enabled: true },
+            { id: 'blk4', type: 'behavior', targetRole: 'enemy', action: 'patrol_h', enabled: true },
+            { id: 'blk5', type: 'action_btn', action: 'shoot_bullet', enabled: true }
+        ],
+        customCode: `// โค้ดเสริมของเกม Cyber Hopper 2D\nfunction onStart(api) {\n  api.log('ยินดีต้อนรับสู่ Cyber Hopper 2D!');\n}\n\nfunction onUpdate(api, dt) {\n  // ลอยเหรียญขึ้นลงเบาๆ\n  const t = performance.now() * 0.005;\n  api.findByRole('coin').forEach((c, i) => {\n    if (!c.destroyed) c.renderOffsetY = Math.sin(t + i) * 4;\n  });\n}\n\nfunction onCollision(api, a, b) {\n  // เพิ่มเติมเงื่อนไขการชนได้ที่นี่\n}`
+    },
+    {
+        id: 'builtin_runner',
+        name: 'Meteor Dodge X',
+        authorName: 'KiraDev',
+        authorId: 'kira_dev',
+        category: 'runner',
+        isPublic: true,
+        isBuiltin: true,
+        caption: 'เกมหลบอุกกาบาตสุดมันส์! บังคับยานซ้าย-ขวาเก็บดาวพลังงานและหลบสิ่งกีดขวางที่ร่วงลงมาแบบสุ่มด้วย Custom JS',
+        likes: 412,
+        updatedAt: Date.now() - 3600000 * 12,
+        bgColor: '#09090b',
+        bgImage: '',
+        customAssets: [],
+        objects: [
+            { id: 'p1', name: 'Ship', role: 'player_topdown', x: 160, y: 250, w: 36, h: 36, color: '#60a5fa', sprite: getPresetSprite('ship'), speed: 5.5, jumpForce: 0, gravity: 0 },
+            { id: 'wL', name: 'WallL', role: 'solid', x: 0, y: 0, w: 14, h: 340, color: '#334155', sprite: '', speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'wR', name: 'WallR', role: 'solid', x: 356, y: 0, w: 14, h: 340, color: '#334155', sprite: '', speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'wB', name: 'Floor', role: 'solid', x: 0, y: 325, w: 370, h: 16, color: '#334155', sprite: '', speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'm1', name: 'Meteor1', role: 'enemy', x: 70, y: 20, w: 30, h: 30, color: '#ef4444', sprite: getPresetSprite('spike'), speed: 3.4, jumpForce: 0, gravity: 0 },
+            { id: 'm2', name: 'Meteor2', role: 'enemy', x: 240, y: -90, w: 30, h: 30, color: '#ef4444', sprite: getPresetSprite('spike'), speed: 3.9, jumpForce: 0, gravity: 0 },
+            { id: 's1', name: 'Star', role: 'coin', x: 165, y: -40, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 2.8, jumpForce: 0, gravity: 0 }
+        ],
+        blocks: [
+            { id: 'b1', type: 'collision', roleA: 'player', roleB: 'enemy', action: 'game_over', enabled: true },
+            { id: 'b2', type: 'action_btn', action: 'dash_forward', enabled: true }
+        ],
+        customCode: `// ระบบสุ่มอุกกาบาตและดาวพลังงานด้วย JavaScript\nfunction onStart(api) {\n  api.lockCamera(0, 0);\n  api.log('Meteor Dodge X เริ่มทำงาน!');\n}\n\nfunction onUpdate(api, dt) {\n  api.findByRole('enemy').forEach(m => {\n    m.y += m.speed;\n    if (m.y > 330) {\n      m.y = -30;\n      m.x = 24 + Math.random() * 290;\n      m.speed = Math.min(6.5, m.speed + 0.08);\n      api.addScore(1);\n    }\n  });\n  api.findByRole('coin').forEach(c => {\n    c.destroyed = false;\n    c.y += 2.6;\n    if (c.y > 330) {\n      c.y = -30;\n      c.x = 30 + Math.random() * 280;\n    }\n  });\n}\n\nfunction onCollision(api, a, b) {\n  if (b.role === 'coin') {\n    api.addScore(15);\n    api.playSound('coin');\n    b.y = -40;\n    b.x = 30 + Math.random() * 280;\n  }\n}`
+    },
+    {
+        id: 'builtin_topdown',
+        name: 'Star Arena Shooter',
+        authorName: 'NamoStudio',
+        authorId: 'namo_studio',
+        category: 'topdown',
+        isPublic: true,
+        isBuiltin: true,
+        caption: 'ควบคุมยาน 4 ทิศทาง กดปุ่มแอ็กชันเพื่อยิงทำลายโดรนศัตรู เก็บคอร์พลังงานให้ครบแล้วเข้าวาร์ป!',
+        likes: 189,
+        updatedAt: Date.now() - 3600000 * 22,
+        bgColor: '#020617',
+        bgImage: '',
+        customAssets: [],
+        objects: [
+            { id: 'p1', name: 'Pilot', role: 'player_topdown', x: 50, y: 150, w: 36, h: 36, color: '#60a5fa', sprite: getPresetSprite('ship'), speed: 4.3, jumpForce: 0, gravity: 0 },
+            { id: 'w1', name: 'TopWall', role: 'solid', x: 0, y: 0, w: 420, h: 20, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'w2', name: 'BotWall', role: 'solid', x: 0, y: 300, w: 420, h: 20, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'w3', name: 'MidBlock', role: 'solid', x: 180, y: 110, w: 40, h: 100, color: '#64748b', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'e1', name: 'Drone1', role: 'enemy', x: 270, y: 60, w: 34, h: 34, color: '#f43f5e', sprite: getPresetSprite('slime'), speed: 2.2, jumpForce: 0, gravity: 0 },
+            { id: 'e2', name: 'Drone2', role: 'enemy', x: 270, y: 220, w: 34, h: 34, color: '#f43f5e', sprite: getPresetSprite('slime'), speed: 2.5, jumpForce: 0, gravity: 0 },
+            { id: 'c1', name: 'Core1', role: 'coin', x: 110, y: 60, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'c2', name: 'Core2', role: 'coin', x: 320, y: 150, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'g1', name: 'Exit', role: 'goal', x: 365, y: 136, w: 38, h: 46, color: '#10b981', sprite: getPresetSprite('portal'), speed: 0, jumpForce: 0, gravity: 0 }
+        ],
+        blocks: [
+            { id: 'b1', type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true },
+            { id: 'b2', type: 'collision', roleA: 'player', roleB: 'enemy', action: 'game_over', enabled: true },
+            { id: 'b3', type: 'collision', roleA: 'player', roleB: 'goal', action: 'win_game', enabled: true },
+            { id: 'b4', type: 'behavior', targetRole: 'enemy', action: 'patrol_v', enabled: true },
+            { id: 'b5', type: 'action_btn', action: 'shoot_bullet', enabled: true }
+        ],
+        customCode: `// กดปุ่มแอ็กชันเพื่อยิงกระสุนกำจัดศัตรู!\nfunction onStart(api) {\n  api.log('Star Arena พร้อมลุย!');\n}\nfunction onUpdate(api, dt) {}\nfunction onCollision(api, a, b) {}`
+    }
+];
+
+// คอมเมนต์เริ่มต้นในหน้าโซเชียล
+state.commentsMap['builtin_platformer'] = [
+    { user: 'PloyPlay', text: 'ด่านสนุกมากครับ แท่นเด้งลื่นดี!' },
+    { user: 'DevThai', text: 'ชอบตรงกดเล่นต่อจากคลิปได้เลย' }
+];
+state.commentsMap['builtin_runner'] = [
+    { user: 'Mint2D', text: 'เล่นได้ 120 คะแนนแล้ว ยากขึ้นเรื่อยๆ มันส์มาก' }
+];
+state.commentsMap['builtin_topdown'] = [
+    { user: 'BeamGame', text: 'ระบบยิงปุ่มแอ็กชันตอบสนองไวมากครับ' }
+];
+
+/**
+ * ============================================================================
+ * 3. BOOT LOADING SEQUENCE & AUTHENTICATION FLOW
+ * ============================================================================
+ */
+async function runBootSequence() {
+    const steps = [
+        { pct: 20, text: 'กำลังโหลดแกนประมวลผล 2D Engine...' },
+        { pct: 45, text: 'กำลังเตรียมระบบฟิสิกส์และแอนิเมชัน...' },
+        { pct: 70, text: 'กำลังเชื่อมต่อระบบโซเชียลและคลาวด์...' },
+        { pct: 90, text: 'กำลังเตรียมเครื่องมือสร้างเกมและคอมไพเลอร์โค้ด...' },
+        { pct: 100, text: 'พร้อมใช้งาน' }
+    ];
+    const bar = document.getElementById('bootProgressBar');
+    const txt = document.getElementById('bootStatusText');
+    const pct = document.getElementById('bootPercentText');
+
+    for (const step of steps) {
+        bar.style.width = step.pct + '%';
+        txt.textContent = step.text;
+        pct.textContent = step.pct + '%';
+        await new Promise(r => setTimeout(r, 420));
+    }
+
+    await new Promise(r => setTimeout(r, 250));
+    document.getElementById('bootScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+}
+
+function showLoginError(msg) {
+    const box = document.getElementById('loginErrorBox');
+    box.textContent = msg;
+    box.classList.remove('hidden');
+}
+
+// ฟังก์ชันเข้าสู่แอปหลักหลังจาก Authentication สำเร็จ
+function enterMainApp(userObj) {
+    state.user = userObj;
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+
+    // อัปเดตส่วนหัวและโมดอลโปรไฟล์
+    document.getElementById('headerUserName').textContent = userObj.displayName;
+    document.getElementById('profileModalName').textContent = userObj.displayName;
+    document.getElementById('profileModalProvider').textContent = userObj.provider;
+    document.getElementById('profileModalUid').textContent = userObj.uid;
+
+    const initial = (userObj.displayName || 'U').charAt(0).toUpperCase();
+    const avatarHtml = userObj.photoURL
+        ? `<img src="${userObj.photoURL}" class="w-full h-full object-cover grayscale" onerror="this.parentElement.textContent='${initial}'">`
+        : initial;
+    document.getElementById('headerAvatar').innerHTML = avatarHtml;
+    document.getElementById('profileModalAvatar').innerHTML = avatarHtml;
+
+    subscribeFirestoreData();
+    switchMainTab('play');
+    showToast(`ยินดีต้อนรับ, ${userObj.displayName}`);
+}
+
+// ปุ่มเข้าสู่ระบบด้วย Google (Firebase Auth signInWithPopup)
+document.getElementById('btnGoogleLogin').addEventListener('click', async () => {
+    const btnText = document.getElementById('btnGoogleText');
+    document.getElementById('loginErrorBox').classList.add('hidden');
+
+    if (!firebaseReady || !auth) {
+        showLoginError('สภาพแวดล้อมตัวอย่างนี้ยังไม่ได้เชื่อมต่อการตั้งค่า Google OAuth ภายนอก กรุณากด "เข้าใช้งานแบบผู้เยี่ยมชม (Guest)" เพื่อทดลองใช้งานทุกฟีเจอร์ได้ทันที');
+        return;
+    }
+
+    try {
+        btnText.textContent = 'กำลังเชื่อมต่อ Google...';
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const u = result.user;
+        enterMainApp({
+            uid: u.uid,
+            displayName: u.displayName || 'Google Creator',
+            photoURL: u.photoURL || '',
+            provider: 'เข้าสู่ระบบผ่าน Google'
+        });
+    } catch (err) {
+        console.warn('Google login error:', err);
+        let friendly = 'ไม่สามารถเปิดหน้าต่างเข้าสู่ระบบ Google ได้';
+        if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+            friendly = 'หน้าต่างป๊อปอัป Google ถูกปิดหรือถูกบล็อกโดยเบราว์เซอร์ คุณสามารถลองใหม่หรือใช้ปุ่ม "เข้าใช้งานแบบผู้เยี่ยมชม (Guest)" ด้านล่างได้ทันที';
+        } else if (err.code === 'auth/unauthorized-domain' || err.code === 'auth/operation-not-allowed') {
+            friendly = 'โดเมนพรีวิวนี้ยังไม่เปิดใช้งาน Google Popup OAuth กรุณากด "เข้าใช้งานแบบผู้เยี่ยมชม (Guest)" เพื่อใช้งานคลาวด์และฟีเจอร์ทั้งหมด';
+        }
+        showLoginError(friendly);
+    } finally {
+        btnText.textContent = 'เข้าสู่ระบบด้วย Google';
+    }
+});
+
+// ปุ่มเข้าใช้งานแบบผู้เยี่ยมชม (Guest - ใช้ Custom Token หรือ Anonymous Auth)
+document.getElementById('btnGuestLogin').addEventListener('click', async () => {
+    document.getElementById('loginErrorBox').classList.add('hidden');
+    try {
+        if (firebaseReady && auth) {
+            let cred;
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                cred = await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                cred = await signInAnonymously(auth);
+            }
+            const u = cred.user;
+            enterMainApp({
+                uid: u.uid,
+                displayName: 'นักสร้างเกม (Guest)',
+                photoURL: '',
+                provider: 'บัญชีผู้เยี่ยมชม (Cloud Sync)'
+            });
+        } else {
+            enterMainApp({
+                uid: 'guest_' + Math.random().toString(36).slice(2, 10),
+                displayName: 'นักสร้างเกม (Guest)',
+                photoURL: '',
+                provider: 'โหมดทดลอง (In-Memory)'
+            });
+        }
+    } catch (err) {
+        console.warn('Guest auth fallback:', err);
+        enterMainApp({
+            uid: 'guest_' + Math.random().toString(36).slice(2, 10),
+            displayName: 'นักสร้างเกม (Guest)',
+            photoURL: '',
+            provider: 'โหมดทดลอง (In-Memory)'
+        });
+    }
+});
+
+// โมดอลโปรไฟล์ และออกจากระบบ
+document.getElementById('btnProfile').onclick = () => document.getElementById('profileModal').classList.remove('hidden');
+document.getElementById('btnCloseProfile').onclick = () => document.getElementById('profileModal').classList.add('hidden');
+document.getElementById('btnSignOut').onclick = async () => {
+    document.getElementById('profileModal').classList.add('hidden');
+    if (state.unsubUserProjects) state.unsubUserProjects();
+    if (state.unsubPublicGames) state.unsubPublicGames();
+    stopAllSocialPreviews();
+    try {
+        if (firebaseReady && auth) await signOut(auth);
+    } catch (_) {}
+    state.user = null;
+    state.userProjects = [];
+    document.getElementById('mainApp').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    showToast('ออกจากระบบแล้ว');
+};
+
+/**
+ * ============================================================================
+ * 4. FIRESTORE SYNC (STRICT RULE 1, 2, 3 COMPLIANT — NO localStorage)
+ * ============================================================================
+ */
+function createStarterProjectTemplate(name, tpl) {
+    const id = 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const authorName = state.user?.displayName || 'Creator';
+    const authorId = state.user?.uid || 'guest';
+
+    let objects = [];
+    let blocks = [];
+    let category = tpl === 'topdown' ? 'topdown' : 'platformer';
+
+    if (tpl === 'platformer') {
+        objects = [
+            { id: 'o1', name: 'Player', role: 'player_platformer', x: 40, y: 160, w: 36, h: 36, color: '#38bdf8', sprite: getPresetSprite('hero_bot'), speed: 4.2, jumpForce: 11, gravity: 0.55 },
+            { id: 'o2', name: 'Floor', role: 'solid', x: 0, y: 260, w: 360, h: 28, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'o3', name: 'Coin', role: 'coin', x: 180, y: 200, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'o4', name: 'Enemy', role: 'enemy', x: 240, y: 226, w: 34, h: 34, color: '#f43f5e', sprite: getPresetSprite('slime'), speed: 1.8, jumpForce: 0, gravity: 0 },
+            { id: 'o5', name: 'Goal', role: 'goal', x: 310, y: 214, w: 38, h: 46, color: '#10b981', sprite: getPresetSprite('portal'), speed: 0, jumpForce: 0, gravity: 0 }
+        ];
+        blocks = [
+            { id: 'b1', type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true },
+            { id: 'b2', type: 'collision', roleA: 'player', roleB: 'enemy', action: 'game_over', enabled: true },
+            { id: 'b3', type: 'collision', roleA: 'player', roleB: 'goal', action: 'win_game', enabled: true },
+            { id: 'b4', type: 'behavior', targetRole: 'enemy', action: 'patrol_h', enabled: true },
+            { id: 'b5', type: 'action_btn', action: 'shoot_bullet', enabled: true }
+        ];
+    } else if (tpl === 'topdown') {
+        objects = [
+            { id: 'o1', name: 'Hero', role: 'player_topdown', x: 60, y: 140, w: 36, h: 36, color: '#60a5fa', sprite: getPresetSprite('ship'), speed: 4.5, jumpForce: 0, gravity: 0 },
+            { id: 'o2', name: 'Wall', role: 'solid', x: 160, y: 90, w: 30, h: 120, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 },
+            { id: 'o3', name: 'Coin', role: 'coin', x: 250, y: 140, w: 26, h: 26, color: '#facc15', sprite: getPresetSprite('coin'), speed: 0, jumpForce: 0, gravity: 0 }
+        ];
+        blocks = [
+            { id: 'b1', type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true },
+            { id: 'b2', type: 'action_btn', action: 'shoot_bullet', enabled: true }
+        ];
+    } else {
+        objects = [
+            { id: 'o1', name: 'Player', role: 'player_platformer', x: 100, y: 120, w: 36, h: 36, color: '#38bdf8', sprite: getPresetSprite('hero_bot'), speed: 4.2, jumpForce: 11, gravity: 0.55 },
+            { id: 'o2', name: 'Floor', role: 'solid', x: 20, y: 240, w: 280, h: 26, color: '#475569', sprite: getPresetSprite('brick'), speed: 0, jumpForce: 0, gravity: 0 }
+        ];
+        blocks = [
+            { id: 'b1', type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true }
+        ];
+    }
+
+    return {
+        id,
+        name: name || 'เกม 2D ของฉัน',
+        authorName,
+        authorId,
+        category,
+        isPublic: false,
+        caption: `เกม 2D ที่สร้างด้วย MONO ENGINE โดย ${authorName} ลองเข้ามาเล่นกันดู!`,
+        likes: 0,
+        updatedAt: Date.now(),
+        bgColor: '#09090b',
+        bgImage: '',
+        customAssets: [],
+        objects,
+        blocks,
+        customCode: `// เขียนโค้ด JavaScript ปรับแต่งเกมของคุณได้ที่นี่\nfunction onStart(api) {\n  api.log('เริ่มเกมเรียบร้อย!');\n}\n\nfunction onUpdate(api, dt) {\n  // โค้ดที่รันทุกเฟรม\n}\n\nfunction onCollision(api, a, b) {\n  // โค้ดเมื่อวัตถุ a ชนวัตถุ b\n}`
+    };
+}
+
+function subscribeFirestoreData() {
+    if (!state.user) return;
+    if (!firebaseReady || !db || !auth?.currentUser) {
+        // กรณีทำงานแบบ In-Memory (ไม่มี Firebase Config)
+        if (state.userProjects.length === 0) {
+            state.userProjects = [createStarterProjectTemplate('ด่านผจญภัยแรกของฉัน', 'platformer')];
+        }
+        document.getElementById('cloudSyncBadge').textContent = 'บันทึกในเซสชันนี้';
+        renderAllViews();
+        return;
+    }
+
+    const uid = auth.currentUser.uid;
+    document.getElementById('cloudSyncBadge').textContent = 'เชื่อมต่อคลาวด์แล้ว';
+
+    // 1. ฟังข้อมูลโปรเจกต์ส่วนตัวของผู้ใช้: /artifacts/{appId}/users/{userId}/projects
+    const userCol = collection(db, 'artifacts', appId, 'users', uid, 'projects');
+    state.unsubUserProjects = onSnapshot(
+        userCol,
+        (snap) => {
+            const list = [];
+            snap.forEach(d => {
+                const raw = d.data();
+                list.push(deserializeProject(raw));
+            });
+            // เรียงลำดับใน JS (ไม่ใช้ orderBy ใน Firestore)
+            list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            state.userProjects = list;
+            renderCreateHub();
+        },
+        (err) => {
+            console.warn('User projects snapshot error:', err);
+        }
+    );
+
+    // 2. ฟังข้อมูลเกมสาธารณะทั้งหมด: /artifacts/{appId}/public/data/games
+    const pubCol = collection(db, 'artifacts', appId, 'public', 'data', 'games');
+    state.unsubPublicGames = onSnapshot(
+        pubCol,
+        (snap) => {
+            const list = [];
+            snap.forEach(d => {
+                const raw = d.data();
+                const parsed = deserializeProject(raw);
+                if (parsed.isPublic) list.push(parsed);
+            });
+            list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            state.publicGames = list;
+            renderPlayTab();
+            if (state.activeTab === 'social') renderSocialFeed();
+        },
+        (err) => {
+            console.warn('Public games snapshot error:', err);
+        }
+    );
+}
+
+// แปลงข้อมูลโปรเจกต์ให้ปลอดภัยกับ Firestore (Serialize array ซับซ้อน)
+function serializeProject(p) {
+    return {
+        id: p.id,
+        name: p.name,
+        authorName: p.authorName || state.user?.displayName || 'Creator',
+        authorId: p.authorId || state.user?.uid || 'guest',
+        category: p.category || 'platformer',
+        isPublic: !!p.isPublic,
+        caption: p.caption || '',
+        likes: p.likes || 0,
+        updatedAt: Date.now(),
+        bgColor: p.bgColor || '#09090b',
+        bgImage: p.bgImage || '',
+        objectsJson: JSON.stringify(p.objects || []),
+        blocksJson: JSON.stringify(p.blocks || []),
+        customAssetsJson: JSON.stringify(p.customAssets || []),
+        customCode: p.customCode || ''
+    };
+}
+
+function deserializeProject(raw) {
+    return {
+        ...raw,
+        objects: raw.objectsJson ? JSON.parse(raw.objectsJson) : (raw.objects || []),
+        blocks: raw.blocksJson ? JSON.parse(raw.blocksJson) : (raw.blocks || []),
+        customAssets: raw.customAssetsJson ? JSON.parse(raw.customAssetsJson) : (raw.customAssets || [])
+    };
+}
+
+async function saveProjectToCloud(proj) {
+    proj.updatedAt = Date.now();
+    // อัปเดตในหน่วยความจำทันทีเพื่อให้ UI ตอบสนองไว
+    const idx = state.userProjects.findIndex(p => p.id === proj.id);
+    if (idx >= 0) state.userProjects[idx] = proj;
+    else state.userProjects.unshift(proj);
+
+    // อัปเดตรายการสาธารณะในหน่วยความจำด้วย
+    const pubIdx = state.publicGames.findIndex(g => g.id === proj.id);
+    if (proj.isPublic) {
+        if (pubIdx >= 0) state.publicGames[pubIdx] = proj;
+        else state.publicGames.unshift(proj);
+    } else if (pubIdx >= 0) {
+        state.publicGames.splice(pubIdx, 1);
+    }
+
+    renderAllViews();
+
+    if (!firebaseReady || !db || !auth?.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const payload = serializeProject(proj);
+
+    try {
+        await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'projects', proj.id), payload);
+        const pubRef = doc(db, 'artifacts', appId, 'public', 'data', 'games', proj.id);
+        if (proj.isPublic) {
+            await setDoc(pubRef, payload);
+        } else {
+            await deleteDoc(pubRef).catch(() => {});
+        }
+    } catch (err) {
+        console.warn('Cloud save error:', err);
+        showToast('บันทึกในเครื่องแล้ว (คลาวด์ไม่พร้อมใช้งาน)');
+    }
+}
+
+async function deleteProjectFromCloud(projId) {
+    state.userProjects = state.userProjects.filter(p => p.id !== projId);
+    state.publicGames = state.publicGames.filter(g => g.id !== projId);
+    renderAllViews();
+
+    if (!firebaseReady || !db || !auth?.currentUser) return;
+    const uid = auth.currentUser.uid;
+    try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'users', uid, 'projects', projId));
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'games', projId)).catch(() => {});
+    } catch (err) {
+        console.warn('Cloud delete error:', err);
+    }
+}
+
+// รวมรายชื่อเกมสาธารณะทั้งหมด (เกมตัวอย่าง + เกมจากชุมชนที่ตั้งเป็นสาธารณะ)
+function getAllPlayableGames() {
+    const map = new Map();
+    state.publicGames.forEach(g => map.set(g.id, g));
+    BUILTIN_GAMES.forEach(g => {
+        if (!map.has(g.id)) map.set(g.id, g);
+    });
+    return Array.from(map.values());
+}
+
+/**
+ * ============================================================================
+ * 5. CORE 2D GAME RUNTIME ENGINE (PLAY, PLAYTEST & SOCIAL PREVIEW CLIPS)
+ * ============================================================================
+ */
+const imageCache = new Map();
+function getCachedImage(src) {
+    if (!src) return null;
+    if (imageCache.has(src)) return imageCache.get(src);
+    const img = new Image();
+    img.src = src;
+    imageCache.set(src, img);
+    return img;
+}
+
+class MonoRuntime {
+    constructor(canvasEl, gameData, options = {}) {
+        this.canvas = canvasEl;
+        this.ctx = canvasEl.getContext('2d');
+        this.sourceGame = gameData;
+        this.options = options; // { autoPilot, onScore, onEnd, onLog, silent }
+        this.running = false;
+        this.rafId = null;
+        this.score = 0;
+        this.ended = false;
+        this.camera = { x: 0, y: 0, locked: false };
+        this.input = { left: false, right: false, up: false, down: false, jump: false, action: false, actionJustPressed: false };
+        this.objects = [];
+        this.bullets = [];
+        this.hooks = { onStart: null, onUpdate: null, onCollision: null };
+        this.elapsed = 0;
+        this.lastTs = 0;
+        this.reset();
+    }
+
+    log(msg, isErr = false) {
+        if (this.options.onLog) this.options.onLog(String(msg), isErr);
+    }
+
+    compileUserCode() {
+        this.hooks = { onStart: null, onUpdate: null, onCollision: null };
+        const code = (this.sourceGame.customCode || '').trim();
+        if (!code) return;
+        try {
+            const factory = new Function(`
+                ${code}
+                return {
+                    onStart: typeof onStart === 'function' ? onStart : null,
+                    onUpdate: typeof onUpdate === 'function' ? onUpdate : null,
+                    onCollision: typeof onCollision === 'function' ? onCollision : null
+                };
+            `);
+            const exported = factory();
+            if (exported) this.hooks = exported;
+        } catch (err) {
+            this.log('SyntaxError: ' + err.message, true);
+        }
+    }
+
+    createApi() {
+        const self = this;
+        return {
+            get objects() { return self.objects; },
+            get player() { return self.objects.find(o => !o.destroyed && o.role.startsWith('player')); },
+            get input() { return self.input; },
+            get score() { return self.score; },
+            find(name) { return self.objects.find(o => !o.destroyed && o.name === name); },
+            findByRole(role) { return self.objects.filter(o => !o.destroyed && (role === 'player' ? o.role.startsWith('player') : o.role === role)); },
+            addScore(n) {
+                self.score += Number(n) || 0;
+                if (self.options.onScore) self.options.onScore(self.score);
+            },
+            spawnBullet(x, y, vx, vy, color = '#ffffff') {
+                self.bullets.push({ x, y, w: 10, h: 6, vx, vy, color, life: 60 });
+            },
+            lockCamera(x, y) {
+                self.camera.locked = true;
+                self.camera.x = x;
+                self.camera.y = y;
+            },
+            playSound(type) {
+                if (!self.options.silent) playSfx(type);
+            },
+            log(msg) { self.log(msg, false); },
+            win(msg = 'ผ่านด่านสำเร็จ!') { self.finish('win', msg); },
+            gameOver(msg = 'เกมจบแล้ว!') { self.finish('gameover', msg); },
+            restart() { self.reset(); }
+        };
+    }
+
+    reset() {
+        this.score = 0;
+        this.ended = false;
+        this.elapsed = 0;
+        this.bullets = [];
+        this.camera = { x: 0, y: 0, locked: false };
+        this.objects = JSON.parse(JSON.stringify(this.sourceGame.objects || [])).map(o => ({
+            ...o,
+            vx: 0,
+            vy: 0,
+            startX: o.x,
+            startY: o.y,
+            facingX: 1,
+            facingY: 0,
+            grounded: false,
+            destroyed: false,
+            renderOffsetY: 0,
+            patrolDir: 1
+        }));
+        if (this.options.onScore) this.options.onScore(0);
+        this.compileUserCode();
+        this.api = this.createApi();
+        if (this.hooks.onStart) {
+            try { this.hooks.onStart(this.api); }
+            catch (err) { this.log('onStart Error: ' + err.message, true); }
+        }
+    }
+
+    finish(status, message) {
+        if (this.ended) return;
+        this.ended = true;
+        if (!this.options.silent) playSfx(status === 'win' ? 'win' : 'hit');
+        if (this.options.onEnd) this.options.onEnd(status, message, this.score);
+    }
+
+    aabb(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    // โหมด AI บังคับอัตโนมัติสำหรับคลิปตัวอย่างในหน้าโซเชียล
+    updateAutoPilot() {
+        const t = this.elapsed;
+        const player = this.objects.find(o => !o.destroyed && o.role.startsWith('player'));
+        if (!player) return;
+
+        if (this.sourceGame.category === 'runner') {
+            this.input.left = Math.sin(t * 2.6) < -0.15;
+            this.input.right = Math.sin(t * 2.6) > 0.15;
+            this.input.up = false;
+            this.input.down = false;
+        } else if (player.role === 'player_platformer') {
+            this.input.right = (t % 4.5) < 3.4;
+            this.input.left = (t % 4.5) >= 3.4;
+            this.input.jump = Math.floor(t * 2) % 3 === 1;
+            if (Math.floor(t * 3) !== Math.floor((t - 0.016) * 3)) {
+                this.input.actionJustPressed = true;
+            }
+        } else {
+            this.input.right = Math.cos(t * 1.4) > 0.1;
+            this.input.left = Math.cos(t * 1.4) < -0.1;
+            this.input.down = Math.sin(t * 1.8) > 0.1;
+            this.input.up = Math.sin(t * 1.8) < -0.1;
+            if (Math.floor(t * 2.5) !== Math.floor((t - 0.016) * 2.5)) {
+                this.input.actionJustPressed = true;
+            }
+        }
+    }
+
+    runBlocksOnCollision(a, b) {
+        const blocks = (this.sourceGame.blocks || []).filter(bl => bl.enabled && bl.type === 'collision');
+        blocks.forEach(bl => {
+            const matchA = bl.roleA === 'player' ? a.role.startsWith('player') : a.role === bl.roleA;
+            const matchB = bl.roleB === 'player' ? b.role.startsWith('player') : b.role === bl.roleB;
+            if (!matchA || !matchB) return;
+
+            if (bl.action === 'score_hide') {
+                if (!b.destroyed) {
+                    b.destroyed = true;
+                    this.api.addScore(10);
+                    this.api.playSound('coin');
+                }
+            } else if (bl.action === 'game_over') {
+                if (this.options.autoPilot) {
+                    this.reset();
+                } else {
+                    this.finish('gameover', 'ชนสิ่งกีดขวางแล้ว!');
+                }
+            } else if (bl.action === 'win_game') {
+                if (this.options.autoPilot) {
+                    this.api.addScore(100);
+                    this.reset();
+                } else {
+                    this.api.addScore(100);
+                    this.finish('win', 'ยินดีด้วย! คุณผ่านด่านแล้ว');
+                }
+            } else if (bl.action === 'bounce_a') {
+                a.vy = -14;
+                this.api.playSound('bounce');
+            }
+        });
+    }
+
+    step(dt) {
+        if (this.ended) return;
+        this.elapsed += dt;
+
+        if (this.options.autoPilot) {
+            this.updateAutoPilot();
+        }
+
+        const solids = this.objects.filter(o => !o.destroyed && (o.role === 'solid' || o.role === 'bouncy'));
+        const blocks = (this.sourceGame.blocks || []).filter(bl => bl.enabled);
+
+        // ประมวลผลปุ่ม Action จากบล็อกโค้ด
+        const player = this.objects.find(o => !o.destroyed && o.role.startsWith('player'));
+        if (player && this.input.actionJustPressed) {
+            blocks.filter(b => b.type === 'action_btn').forEach(bl => {
+                if (bl.action === 'shoot_bullet') {
+                    this.api.spawnBullet(player.x + player.w / 2, player.y + player.h / 2 - 3, (player.facingX || 1) * 8.5, 0, '#facc15');
+                    this.api.playSound('shoot');
+                } else if (bl.action === 'super_jump') {
+                    player.vy = -(player.jumpForce || 11) * 1.35;
+                    this.api.playSound('jump');
+                } else if (bl.action === 'dash_forward') {
+                    player.x += (player.facingX || 1) * 32;
+                    this.api.playSound('shoot');
+                }
+            });
+        }
+
+        // อัปเดตกระสุน
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const b = this.bullets[i];
+            b.x += b.vx;
+            b.y += b.vy;
+            b.life--;
+            if (b.life <= 0) {
+                this.bullets.splice(i, 1);
+                continue;
+            }
+            this.objects.forEach(o => {
+                if (!o.destroyed && o.role === 'enemy' && this.aabb(b, o)) {
+                    o.destroyed = true;
+                    b.life = 0;
+                    this.api.addScore(20);
+                    this.api.playSound('coin');
+                }
+            });
+        }
+
+        // อัปเดตวัตถุทั้งหมด
+        this.objects.forEach(obj => {
+            if (obj.destroyed) return;
+
+            if (obj.role === 'player_platformer') {
+                obj.vx = 0;
+                if (this.input.left) { obj.vx = -(obj.speed || 4); obj.facingX = -1; }
+                if (this.input.right) { obj.vx = (obj.speed || 4); obj.facingX = 1; }
+                if ((this.input.jump || this.input.up) && obj.grounded) {
+                    obj.vy = -(obj.jumpForce || 11);
+                    obj.grounded = false;
+                    this.api.playSound('jump');
+                }
+                obj.vy += (obj.gravity ?? 0.55);
+
+                obj.x += obj.vx;
+                solids.forEach(s => {
+                    if (this.aabb(obj, s)) {
+                        if (obj.vx > 0) obj.x = s.x - obj.w;
+                        else if (obj.vx < 0) obj.x = s.x + s.w;
+                    }
+                });
+
+                obj.y += obj.vy;
+                obj.grounded = false;
+                solids.forEach(s => {
+                    if (this.aabb(obj, s)) {
+                        if (obj.vy > 0) {
+                            obj.y = s.y - obj.h;
+                            if (s.role === 'bouncy') {
+                                obj.vy = -(s.jumpForce || 15);
+                                this.api.playSound('bounce');
+                            } else {
+                                obj.vy = 0;
+                                obj.grounded = true;
+                            }
+                        } else if (obj.vy < 0) {
+                            obj.y = s.y + s.h;
+                            obj.vy = 0;
+                        }
+                    }
+                });
+
+                if (obj.y > 760) {
+                    if (this.options.autoPilot) this.reset();
+                    else this.finish('gameover', 'ตกขอบฉากแล้ว!');
+                }
+            } else if (obj.role === 'player_topdown') {
+                obj.vx = 0;
+                obj.vy = 0;
+                if (this.input.left) { obj.vx = -(obj.speed || 4.5); obj.facingX = -1; }
+                if (this.input.right) { obj.vx = (obj.speed || 4.5); obj.facingX = 1; }
+                if (this.input.up) obj.vy = -(obj.speed || 4.5);
+                if (this.input.down) obj.vy = (obj.speed || 4.5);
+
+                obj.x += obj.vx;
+                solids.forEach(s => {
+                    if (this.aabb(obj, s)) {
+                        if (obj.vx > 0) obj.x = s.x - obj.w;
+                        else if (obj.vx < 0) obj.x = s.x + s.w;
+                    }
+                });
+                obj.y += obj.vy;
+                solids.forEach(s => {
+                    if (this.aabb(obj, s)) {
+                        if (obj.vy > 0) obj.y = s.y - obj.h;
+                        else if (obj.vy < 0) obj.y = s.y + s.h;
+                    }
+                });
+            }
+
+            // พฤติกรรมอัตโนมัติจากบล็อกโค้ด (Behavior Blocks)
+            blocks.filter(b => b.type === 'behavior' && b.targetRole === obj.role).forEach(bl => {
+                const spd = obj.speed || 2;
+                if (bl.action === 'patrol_h') {
+                    obj.x += spd * obj.patrolDir;
+                    if (Math.abs(obj.x - obj.startX) > 75) obj.patrolDir *= -1;
+                } else if (bl.action === 'patrol_v') {
+                    obj.y += spd * obj.patrolDir;
+                    if (Math.abs(obj.y - obj.startY) > 65) obj.patrolDir *= -1;
+                } else if (bl.action === 'chase_player' && player) {
+                    const dx = player.x - obj.x;
+                    const dy = player.y - obj.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    obj.x += (dx / dist) * (spd * 0.7);
+                    obj.y += (dy / dist) * (spd * 0.7);
+                }
+            });
+        });
+
+        // รัน Custom JS onUpdate
+        if (this.hooks.onUpdate) {
+            try { this.hooks.onUpdate(this.api, dt); }
+            catch (err) { this.log('onUpdate Error: ' + err.message, true); }
+        }
+
+        // เช็คการชนระหว่างผู้เล่นและวัตถุอื่น
+        if (player && !player.destroyed) {
+            this.objects.forEach(other => {
+                if (other.destroyed || other.id === player.id) return;
+                if (this.aabb(player, other)) {
+                    this.runBlocksOnCollision(player, other);
+                    if (this.hooks.onCollision) {
+                        try { this.hooks.onCollision(this.api, player, other); }
+                        catch (err) { this.log('onCollision Error: ' + err.message, true); }
+                    }
+                }
+            });
+
+            // กล้องติดตามผู้เล่น
+            if (!this.camera.locked) {
+                const targetX = this.canvas.width / 2 - (player.x + player.w / 2);
+                const targetY = this.canvas.height / 2 - (player.y + player.h / 2);
+                this.camera.x += (targetX - this.camera.x) * 0.12;
+                this.camera.y += (targetY - this.camera.y) * 0.08;
+            }
+        }
+
+        this.input.actionJustPressed = false;
+    }
+
+    draw() {
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        // พื้นหลังสีหรือรูปพื้นหลังของฉาก
+        ctx.fillStyle = this.sourceGame.bgColor || '#09090b';
+        ctx.fillRect(0, 0, w, h);
+
+        if (this.sourceGame.bgImage) {
+            const bgImg = getCachedImage(this.sourceGame.bgImage);
+            if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+                ctx.drawImage(bgImg, 0, 0, w, h);
+            }
+        }
+
+        ctx.save();
+        ctx.translate(this.camera.x, this.camera.y);
+
+        // วาดวัตถุทั้งหมด
+        this.objects.forEach(obj => {
+            if (obj.destroyed) return;
+            const drawY = obj.y + (obj.renderOffsetY || 0);
+            const img = obj.sprite ? getCachedImage(obj.sprite) : null;
+            if (img && img.complete && img.naturalWidth > 0) {
+                ctx.drawImage(img, obj.x, drawY, obj.w, obj.h);
+            } else {
+                ctx.fillStyle = obj.color || '#ffffff';
+                ctx.beginPath();
+                ctx.roundRect(obj.x, drawY, obj.w, obj.h, 5);
+                ctx.fill();
+            }
+        });
+
+        // วาดกระสุน
+        this.bullets.forEach(b => {
+            ctx.fillStyle = b.color || '#facc15';
+            ctx.beginPath();
+            ctx.roundRect(b.x, b.y, b.w, b.h, 3);
+            ctx.fill();
+        });
+
+        ctx.restore();
+    }
+
+    start() {
+        if (this.running) return;
+        this.running = true;
+        this.lastTs = performance.now();
+        const loop = (now) => {
+            if (!this.running) return;
+            const dt = Math.min(0.05, (now - this.lastTs) / 1000);
+            this.lastTs = now;
+            this.step(dt);
+            this.draw();
+            this.rafId = requestAnimationFrame(loop);
+        };
+        this.rafId = requestAnimationFrame(loop);
+    }
+
+    stop() {
+        this.running = false;
+        if (this.rafId) cancelAnimationFrame(this.rafId);
+    }
+}
+
+// วาดภาพตัวอย่างขนาดเล็ก (Thumbnail) ลงบน Canvas ในการ์ดเกม
+function drawGameThumbnail(canvasEl, game) {
+    const ctx = canvasEl.getContext('2d');
+    canvasEl.width = 160;
+    canvasEl.height = 100;
+    ctx.fillStyle = game.bgColor || '#0b1120';
+    ctx.fillRect(0, 0, 160, 100);
+    ctx.save();
+    ctx.scale(0.32, 0.32);
+    (game.objects || []).forEach(o => {
+        const img = o.sprite ? getCachedImage(o.sprite) : null;
+        if (img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, o.x, o.y, o.w, o.h);
+        } else {
+            ctx.fillStyle = o.color || '#ffffff';
+            ctx.fillRect(o.x, o.y, o.w, o.h);
+        }
+    });
+    ctx.restore();
+}
+
+/**
+ * ============================================================================
+ * 6. MAIN NAVIGATION & TAB 1: PLAY TAB
+ * ============================================================================
+ */
+function switchMainTab(tab) {
+    state.activeTab = tab;
+    ['play', 'social', 'create'].forEach(t => {
+        document.getElementById('view-' + t).classList.toggle('hidden', t !== tab);
+    });
+    document.querySelectorAll('.nav-tab').forEach(btn => {
+        const active = btn.dataset.tab === tab;
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-white/45', !active);
+    });
+
+    const titles = { play: 'เล่นเกม', social: 'โซเชียลฟีด', create: 'สตูดิโอสร้างเกม' };
+    document.getElementById('headerTitle').textContent = titles[tab];
+
+    if (tab === 'play') {
+        stopAllSocialPreviews();
+        renderPlayTab();
+    } else if (tab === 'social') {
+        renderSocialFeed();
+    } else if (tab === 'create') {
+        stopAllSocialPreviews();
+        renderCreateHub();
+    }
+}
+
+document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchMainTab(btn.dataset.tab));
+});
+
+document.getElementById('playSearchInput').addEventListener('input', (e) => {
+    state.playSearch = e.target.value.trim().toLowerCase();
+    renderPlayTab();
+});
+
+document.querySelectorAll('.cat-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+        state.playCategory = btn.dataset.cat;
+        document.querySelectorAll('.cat-pill').forEach(b => {
+            const active = b.dataset.cat === state.playCategory;
+            b.className = active
+                ? 'cat-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white text-black border border-white shrink-0'
+                : 'cat-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-black text-white/75 border border-white/25 shrink-0';
+        });
+        renderPlayTab();
+    });
+});
+
+function renderPlayTab() {
+    const container = document.getElementById('playGamesList');
+    let games = getAllPlayableGames();
+
+    if (state.playCategory === 'community') {
+        games = games.filter(g => !g.isBuiltin);
+    } else if (state.playCategory !== 'all') {
+        games = games.filter(g => g.category === state.playCategory);
+    }
+
+    if (state.playSearch) {
+        games = games.filter(g =>
+            (g.name || '').toLowerCase().includes(state.playSearch) ||
+            (g.authorName || '').toLowerCase().includes(state.playSearch)
+        );
+    }
+
+    container.innerHTML = '';
+    if (games.length === 0) {
+        container.innerHTML = `<div class="border border-white/20 rounded-2xl p-8 text-center text-xs text-white/55">ไม่พบเกมในหมวดหมู่นี้</div>`;
+        return;
+    }
+
+    games.forEach(game => {
+        const card = document.createElement('div');
+        card.className = 'border border-white/25 rounded-2xl p-3 bg-black flex gap-3 items-center hover:border-white transition-colors';
+        const catLabel = game.category === 'runner' ? 'Runner' : game.category === 'topdown' ? 'Top-Down' : 'Platformer';
+        const badgeText = game.isBuiltin ? 'แนะนำ' : 'สาธารณะ';
+
+        card.innerHTML = `
+            <canvas class="thumb-canvas w-24 h-16 rounded-xl border border-white/20 shrink-0 bg-black"></canvas>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 mb-0.5">
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-white text-black font-bold">${badgeText}</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded border border-white/30 text-white/75">${catLabel}</span>
+                </div>
+                <div class="text-sm font-bold truncate">${escapeHtml(game.name)}</div>
+                <div class="text-[10px] text-white/55 truncate">โดย ${escapeHtml(game.authorName || 'Creator')}</div>
+            </div>
+            <button class="play-now-btn px-3.5 py-2 bg-white text-black font-bold text-xs rounded-xl shrink-0 active:scale-95">
+                เล่น
+            </button>
+        `;
+        card.querySelector('.play-now-btn').onclick = () => openGamePlayer(game);
+        container.appendChild(card);
+
+        const thumbCanvas = card.querySelector('.thumb-canvas');
+        drawGameThumbnail(thumbCanvas, game);
+        setTimeout(() => drawGameThumbnail(thumbCanvas, game), 120);
+    });
+}
+
+/**
+ * ============================================================================
+ * 7. TAB 2: SOCIAL FEED (INSTAGRAM-STYLE WITH 5.5s AUTO-PLAY CLIPS & "เล่น" OVERLAY)
+ * ============================================================================
+ */
+let socialClipControllers = [];
+let socialObserver = null;
+
+function stopAllSocialPreviews() {
+    socialClipControllers.forEach(ctrl => ctrl.destroy());
+    socialClipControllers = [];
+    if (socialObserver) {
+        socialObserver.disconnect();
+        socialObserver = null;
+    }
+}
+
+function renderSocialFeed() {
+    stopAllSocialPreviews();
+    const list = document.getElementById('socialFeedList');
+    const games = getAllPlayableGames();
+    document.getElementById('socialPostCount').textContent = `${games.length} โพสต์`;
+    list.innerHTML = '';
+
+    const CLIP_DURATION = 5.5; // ความยาวคลิปแนะนำเกม 5.5 วินาที
+
+    socialObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const ctrl = socialClipControllers.find(c => c.el === entry.target);
+            if (!ctrl) return;
+            if (entry.isIntersecting) ctrl.playIfReady();
+            else ctrl.pause();
+        });
+    }, { threshold: 0.55 });
+
+    games.forEach(game => {
+        const post = document.createElement('article');
+        post.className = 'bg-black py-4';
+        const isLiked = !!state.likesMap[game.id];
+        const likeCount = (game.likes || 0) + (isLiked ? 1 : 0);
+        const commentsCount = (state.commentsMap[game.id] || []).length;
+        const avatarChar = (game.authorName || 'M').charAt(0).toUpperCase();
+
+        post.innerHTML = `
+            <!-- ส่วนหัวโพสต์แบบ IG -->
+            <div class="px-4 pb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full bg-white text-black font-bold text-xs flex items-center justify-center border border-white">
+                        ${avatarChar}
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold leading-tight">${escapeHtml(game.authorName || 'Creator')}</div>
+                        <div class="text-[10px] text-white/55">${escapeHtml(game.name)} • คลิปแนะนำเกม</div>
+                    </div>
+                </div>
+                <span class="text-[9px] border border-white/30 px-2 py-0.5 rounded-full text-white/75 uppercase">${game.category}</span>
+            </div>
+
+            <!-- พื้นที่คลิปตัวอย่างเกมขนาดสี่เหลี่ยมจัตุรัส (Interactive Canvas Preview) -->
+            <div class="relative w-full aspect-square bg-black border-y border-white/15 overflow-hidden">
+                <canvas class="social-clip-canvas w-full h-full"></canvas>
+
+                <!-- ป้ายเวลาคลิปมุมขวาบน -->
+                <div class="clip-timer absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/80 border border-white/35 text-[10px] font-code text-white">
+                    0:05
+                </div>
+
+                <!-- แถบความคืบหน้าคลิปด้านล่าง -->
+                <div class="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                    <div class="clip-progress h-full bg-white transition-none" style="width: 0%;"></div>
+                </div>
+
+                <!-- โอเวอร์เลย์เมื่อคลิปแนะนำจบ: ปุ่มใหญ่ "เล่น" + ปุ่มดูซ้ำ -->
+                <div class="clip-end-overlay hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-6 text-center z-10 animate-fade-in">
+                    <div class="text-[10px] tracking-[0.2em] uppercase text-white/60 mb-1">คลิปตัวอย่างจบแล้ว</div>
+                    <h4 class="text-lg font-bold text-white mb-5">${escapeHtml(game.name)}</h4>
+                    <button class="btn-clip-play px-10 py-3.5 bg-white text-black font-bold text-base rounded-full flex items-center gap-2 border-2 border-white active:scale-95 transition-transform">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+                        <span>เล่น</span>
+                    </button>
+                    <button class="btn-clip-replay mt-4 px-3.5 py-1.5 rounded-full border border-white/40 text-[11px] text-white/85 hover:border-white">
+                        ↻ ดูซ้ำอีกครั้ง
+                    </button>
+                </div>
+            </div>
+
+            <!-- แถบปุ่มถูกใจ คอมเมนต์ แชร์ -->
+            <div class="px-4 pt-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <button class="btn-like flex items-center gap-1.5 text-white">
+                        <svg class="like-icon w-6 h-6" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
+                        <span class="like-count text-xs font-semibold">${likeCount}</span>
+                    </button>
+                    <button class="btn-comment flex items-center gap-1.5 text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <span class="text-xs font-medium">${commentsCount}</span>
+                    </button>
+                    <button class="btn-share text-white">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button class="btn-quick-play-mini text-[11px] font-bold border border-white px-3 py-1 rounded-full hover:bg-white hover:text-black">
+                    ▶ เปิดเกม
+                </button>
+            </div>
+
+            <!-- แคปชันและลิงก์ชื่อเกมที่คลิกเข้าเล่นได้ทันที -->
+            <div class="px-4 pt-2.5 space-y-2">
+                <p class="text-xs leading-relaxed text-white/85">
+                    <span class="font-bold text-white mr-1.5">${escapeHtml(game.authorName || 'Creator')}</span>
+                    ${escapeHtml(game.caption || 'ลองเข้ามาเล่นเกม 2D ที่สร้างด้วย MONO ENGINE!')}
+                </p>
+                <button class="btn-caption-link inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-black font-bold text-[11px] active:scale-95 transition-transform">
+                    <span>▶ เล่นเลย: ${escapeHtml(game.name)}</span>
+                </button>
+            </div>
+        `;
+
+        list.appendChild(post);
+
+        // เชื่อมปุ่มต่างๆ ของโพสต์
+        const clipCanvas = post.querySelector('.social-clip-canvas');
+        const progressEl = post.querySelector('.clip-progress');
+        const timerEl = post.querySelector('.clip-timer');
+        const endOverlay = post.querySelector('.clip-end-overlay');
+
+        // ปรับความละเอียด Canvas ของคลิป
+        const boxW = clipCanvas.parentElement.clientWidth || 380;
+        clipCanvas.width = boxW;
+        clipCanvas.height = boxW;
+
+        const runtime = new MonoRuntime(clipCanvas, game, { autoPilot: true, silent: true });
+        let clipFinished = false;
+        let checkInterval = null;
+
+        const ctrl = {
+            el: post,
+            playIfReady() {
+                if (clipFinished) return;
+                runtime.start();
+                clearInterval(checkInterval);
+                checkInterval = setInterval(() => {
+                    if (!runtime.running) return;
+                    const pct = Math.min(100, (runtime.elapsed / CLIP_DURATION) * 100);
+                    progressEl.style.width = pct + '%';
+                    const remain = Math.max(0, Math.ceil(CLIP_DURATION - runtime.elapsed));
+                    timerEl.textContent = `0:0${remain}`;
+                    if (runtime.elapsed >= CLIP_DURATION) {
+                        clipFinished = true;
+                        runtime.stop();
+                        clearInterval(checkInterval);
+                        endOverlay.classList.remove('hidden');
+                    }
+                }, 60);
+            },
+            pause() {
+                runtime.stop();
+                clearInterval(checkInterval);
+            },
+            replay() {
+                clipFinished = false;
+                endOverlay.classList.add('hidden');
+                progressEl.style.width = '0%';
+                runtime.reset();
+                this.playIfReady();
+            },
+            destroy() {
+                runtime.stop();
+                clearInterval(checkInterval);
+            }
+        };
+
+        socialClipControllers.push(ctrl);
+        socialObserver.observe(post);
+
+        post.querySelector('.btn-clip-play').onclick = () => openGamePlayer(game);
+        post.querySelector('.btn-quick-play-mini').onclick = () => openGamePlayer(game);
+        post.querySelector('.btn-caption-link').onclick = () => openGamePlayer(game);
+        post.querySelector('.btn-clip-replay').onclick = () => ctrl.replay();
+
+        post.querySelector('.btn-like').onclick = () => {
+            state.likesMap[game.id] = !state.likesMap[game.id];
+            const liked = state.likesMap[game.id];
+            post.querySelector('.like-icon').setAttribute('fill', liked ? 'currentColor' : 'none');
+            post.querySelector('.like-count').textContent = (game.likes || 0) + (liked ? 1 : 0);
+        };
+
+        post.querySelector('.btn-comment').onclick = () => openCommentsModal(game);
+
+        post.querySelector('.btn-share').onclick = () => {
+            const temp = document.createElement('textarea');
+            temp.value = `มาเล่นเกม "${game.name}" บน MONO ENGINE กัน!`;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            showToast('คัดลอกลิงก์แชร์เกมแล้ว');
+        };
+    });
+}
+
+// ระบบคอมเมนต์ในฟีดโซเชียล
+function openCommentsModal(game) {
+    state.activeCommentGameId = game.id;
+    document.getElementById('commentsModalTitle').textContent = `ความคิดเห็น — ${game.name}`;
+    renderCommentsList();
+    document.getElementById('commentsModal').classList.remove('hidden');
+}
+function renderCommentsList() {
+    const list = document.getElementById('commentsList');
+    const items = state.commentsMap[state.activeCommentGameId] || [];
+    list.innerHTML = items.length === 0
+        ? `<div class="text-center text-white/45 py-6">ยังไม่มีความคิดเห็น เป็นคนแรกที่คอมเมนต์เลย!</div>`
+        : items.map(c => `
+            <div class="border border-white/15 rounded-xl p-2.5">
+                <div class="font-bold text-[11px] mb-0.5">${escapeHtml(c.user)}</div>
+                <div class="text-white/80 text-xs">${escapeHtml(c.text)}</div>
+            </div>
+        `).join('');
+}
+document.getElementById('btnCloseComments').onclick = () => document.getElementById('commentsModal').classList.add('hidden');
+document.getElementById('btnSendComment').onclick = () => {
+    const inp = document.getElementById('commentInput');
+    const txt = inp.value.trim();
+    if (!txt || !state.activeCommentGameId) return;
+    if (!state.commentsMap[state.activeCommentGameId]) state.commentsMap[state.activeCommentGameId] = [];
+    state.commentsMap[state.activeCommentGameId].push({
+        user: state.user?.displayName || 'ผู้ใช้งาน',
+        text: txt
+    });
+    inp.value = '';
+    renderCommentsList();
+    showToast('ส่งความคิดเห็นแล้ว');
+};
+
+/**
+ * ============================================================================
+ * 8. FULLSCREEN GAME PLAYER MODAL
+ * ============================================================================
+ */
+let activePlayerRuntime = null;
+let currentPlayingGame = null;
+
+function openGamePlayer(game) {
+    stopAllSocialPreviews();
+    currentPlayingGame = game;
+    document.getElementById('playerGameTitle').textContent = game.name;
+    document.getElementById('playerGameAuthor').textContent = 'โดย ' + (game.authorName || 'Creator');
+    document.getElementById('playerEndOverlay').classList.add('hidden');
+    document.getElementById('gamePlayerModal').classList.remove('hidden');
+
+    const pCanvas = document.getElementById('playerCanvas');
+    const rect = pCanvas.parentElement.getBoundingClientRect();
+    pCanvas.width = rect.width;
+    pCanvas.height = rect.height;
+
+    if (activePlayerRuntime) activePlayerRuntime.stop();
+    activePlayerRuntime = new MonoRuntime(pCanvas, game, {
+        onScore: (s) => { document.getElementById('playerScoreDisplay').textContent = s; },
+        onEnd: (status, msg, finalScore) => {
+            document.getElementById('playerEndBadge').textContent = status === 'win' ? 'VICTORY' : 'GAME OVER';
+            document.getElementById('playerEndTitle').textContent = msg;
+            document.getElementById('playerEndDesc').textContent = `คะแนนที่ได้: ${finalScore}`;
+            document.getElementById('playerEndOverlay').classList.remove('hidden');
+        }
+    });
+    activePlayerRuntime.start();
+}
+
+function closeGamePlayer() {
+    if (activePlayerRuntime) {
+        activePlayerRuntime.stop();
+        activePlayerRuntime = null;
+    }
+    document.getElementById('gamePlayerModal').classList.add('hidden');
+    if (state.activeTab === 'social') renderSocialFeed();
+}
+
+document.getElementById('btnClosePlayer').onclick = closeGamePlayer;
+document.getElementById('btnOverlayExit').onclick = closeGamePlayer;
+document.getElementById('btnRestartPlayer').onclick = () => {
+    document.getElementById('playerEndOverlay').classList.add('hidden');
+    if (activePlayerRuntime) activePlayerRuntime.reset();
+};
+document.getElementById('btnOverlayRestart').onclick = () => {
+    document.getElementById('playerEndOverlay').classList.add('hidden');
+    if (activePlayerRuntime) activePlayerRuntime.reset();
+};
+
+// ผูกปุ่มสัมผัสและคีย์บอร์ดสำหรับ Game Player และ Studio Playtest
+function bindControlButton(elId, getRuntime, key, isTrigger = false) {
+    const el = document.getElementById(elId);
+    const onDown = (e) => {
+        e.preventDefault();
+        const rt = getRuntime();
+        if (!rt) return;
+        rt.input[key] = true;
+        if (isTrigger) rt.input.actionJustPressed = true;
+    };
+    const onUp = (e) => {
+        e.preventDefault();
+        const rt = getRuntime();
+        if (!rt) return;
+        rt.input[key] = false;
+    };
+    el.addEventListener('touchstart', onDown, { passive: false });
+    el.addEventListener('touchend', onUp, { passive: false });
+    el.addEventListener('touchcancel', onUp, { passive: false });
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('mouseup', onUp);
+    el.addEventListener('mouseleave', onUp);
+}
+
+bindControlButton('padLeft', () => activePlayerRuntime, 'left');
+bindControlButton('padRight', () => activePlayerRuntime, 'right');
+bindControlButton('padUp', () => activePlayerRuntime, 'up');
+bindControlButton('padDown', () => activePlayerRuntime, 'down');
+bindControlButton('padJump', () => activePlayerRuntime, 'jump');
+bindControlButton('padAction', () => activePlayerRuntime, 'action', true);
+
+window.addEventListener('keydown', (e) => {
+    const rt = activePlayerRuntime || studio.playtestRuntime;
+    if (!rt) return;
+    if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    if (e.key === 'ArrowLeft' || e.key === 'a') rt.input.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') rt.input.right = true;
+    if (e.key === 'ArrowUp' || e.key === 'w') rt.input.up = true;
+    if (e.key === 'ArrowDown' || e.key === 's') rt.input.down = true;
+    if (e.key === ' ') rt.input.jump = true;
+    if (e.key === 'z' || e.key === 'Enter') { rt.input.action = true; rt.input.actionJustPressed = true; }
+});
+window.addEventListener('keyup', (e) => {
+    const rt = activePlayerRuntime || studio.playtestRuntime;
+    if (!rt) return;
+    if (e.key === 'ArrowLeft' || e.key === 'a') rt.input.left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') rt.input.right = false;
+    if (e.key === 'ArrowUp' || e.key === 'w') rt.input.up = false;
+    if (e.key === 'ArrowDown' || e.key === 's') rt.input.down = false;
+    if (e.key === ' ') rt.input.jump = false;
+    if (e.key === 'z' || e.key === 'Enter') rt.input.action = false;
+});
+
+/**
+ * ============================================================================
+ * 9. TAB 3: CREATE HUB (PROJECT LIST, NEW PROJECT, PUBLIC/DRAFT STATUS)
+ * ============================================================================
+ */
+let selectedNewTemplate = 'platformer';
+
+document.getElementById('btnOpenNewProject').onclick = () => {
+    document.getElementById('newProjName').value = '';
+    document.getElementById('newProjectModal').classList.remove('hidden');
+};
+document.getElementById('btnCloseNewProj').onclick = () => {
+    document.getElementById('newProjectModal').classList.add('hidden');
+};
+
+document.querySelectorAll('.tpl-choice').forEach(btn => {
+    btn.onclick = () => {
+        selectedNewTemplate = btn.dataset.tpl;
+        document.querySelectorAll('.tpl-choice').forEach(b => {
+            const active = b.dataset.tpl === selectedNewTemplate;
+            b.className = active
+                ? 'tpl-choice p-2.5 rounded-xl border border-white bg-white text-black text-center'
+                : 'tpl-choice p-2.5 rounded-xl border border-white/30 bg-black text-white text-center';
+        });
+    };
+});
+
+document.getElementById('btnConfirmCreateProj').onclick = async () => {
+    const rawName = document.getElementById('newProjName').value.trim();
+    const proj = createStarterProjectTemplate(rawName || 'โปรเจกต์เกมใหม่', selectedNewTemplate);
+    document.getElementById('newProjectModal').classList.add('hidden');
+    await saveProjectToCloud(proj);
+    openStudio(proj);
+};
+
+function formatThaiTime(ts) {
+    if (!ts) return 'เพิ่งสร้าง';
+    const d = new Date(ts);
+    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) + ' ' +
+           d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderCreateHub() {
+    const list = document.getElementById('createProjectsList');
+    const projs = state.userProjects;
+    document.getElementById('statTotalProjects').textContent = projs.length;
+    document.getElementById('statPublicProjects').textContent = projs.filter(p => p.isPublic).length;
+
+    list.innerHTML = '';
+    if (projs.length === 0) {
+        list.innerHTML = `
+            <div class="border border-white/20 border-dashed rounded-2xl p-8 text-center space-y-2">
+                <div class="text-xs font-bold">ยังไม่มีโปรเจกต์เกม</div>
+                <p class="text-[11px] text-white/55">กดปุ่ม "สร้างโปรเจกต์ใหม่ (+)" ด้านบนเพื่อเริ่มสร้างเกม 2D เกมแรกของคุณ</p>
+            </div>
+        `;
+        return;
+    }
+
+    projs.forEach(proj => {
+        const card = document.createElement('div');
+        card.className = 'border border-white/25 rounded-2xl p-3.5 bg-black space-y-3';
+        const statusBadge = proj.isPublic
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white text-black text-[10px] font-bold">● สาธารณะ (Public)</span>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/40 text-white/75 text-[10px] font-medium">○ ส่วนตัว (Draft)</span>`;
+
+        card.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                    <div class="text-sm font-bold truncate">${escapeHtml(proj.name)}</div>
+                    <div class="text-[10px] text-white/50 mt-0.5">แก้ไขล่าสุด: ${formatThaiTime(proj.updatedAt)} • ${(proj.objects || []).length} วัตถุ</div>
+                </div>
+                <div class="shrink-0">${statusBadge}</div>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5 pt-1 border-t border-white/15">
+                <button class="btn-edit py-2 bg-white text-black font-bold text-[11px] rounded-xl">แก้ไข</button>
+                <button class="btn-play py-2 border border-white/40 text-white text-[11px] rounded-xl">เล่น</button>
+                <button class="btn-pub py-2 border border-white/40 text-white text-[10px] rounded-xl">${proj.isPublic ? 'ตั้งส่วนตัว' : 'เผยแพร่'}</button>
+                <button class="btn-del py-2 border border-white/25 text-white/70 text-[11px] rounded-xl">ลบ</button>
+            </div>
+        `;
+
+        card.querySelector('.btn-edit').onclick = () => openStudio(proj);
+        card.querySelector('.btn-play').onclick = () => openGamePlayer(proj);
+        card.querySelector('.btn-pub').onclick = async () => {
+            proj.isPublic = !proj.isPublic;
+            await saveProjectToCloud(proj);
+            showToast(proj.isPublic ? 'เผยแพร่สู่สาธารณะแล้ว! ปรากฏในหน้าเล่นเกมและโซเชียล' : 'เปลี่ยนเป็นสถานะส่วนตัวแล้ว');
+        };
+        card.querySelector('.btn-del').onclick = () => {
+            openConfirm('ลบโปรเจกต์เกม', `คุณแน่ใจหรือไม่ที่จะลบ "${proj.name}"?`, async () => {
+                await deleteProjectFromCloud(proj.id);
+                showToast('ลบโปรเจกต์เรียบร้อยแล้ว');
+            });
+        };
+
+        list.appendChild(card);
+    });
+}
+
+function renderAllViews() {
+    renderPlayTab();
+    renderCreateHub();
+    if (state.activeTab === 'social') renderSocialFeed();
+}
+
+/**
+ * ============================================================================
+ * 10. GAME STUDIO EDITOR (CANVAS STAGE, EXTERNAL ASSETS, INSPECTOR, BLOCKS, JS CODE)
+ * ============================================================================
+ */
+const studio = {
+    project: null,
+    mode: 'edit',       // 'edit' | 'playtest'
+    gridSnap: true,
+    gridSize: 20,
+    camera: { x: 0, y: 0 },
+    selectedId: null,
+    rafId: null,
+    playtestRuntime: null,
+    consoleLogs: [],
+    pointer: { down: false, mode: null, lastX: 0, lastY: 0, offsetX: 0, offsetY: 0 }
+};
+
+const stCanvas = document.getElementById('studioCanvas');
+const stCtx = stCanvas.getContext('2d');
+
+bindControlButton('stPadLeft', () => studio.playtestRuntime, 'left');
+bindControlButton('stPadRight', () => studio.playtestRuntime, 'right');
+bindControlButton('stPadUp', () => studio.playtestRuntime, 'up');
+bindControlButton('stPadDown', () => studio.playtestRuntime, 'down');
+bindControlButton('stPadJump', () => studio.playtestRuntime, 'jump');
+bindControlButton('stPadAction', () => studio.playtestRuntime, 'action', true);
+
+function resizeStudioCanvas() {
+    const rect = stCanvas.parentElement.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+        stCanvas.width = rect.width;
+        stCanvas.height = rect.height;
+    }
+}
+window.addEventListener('resize', () => {
+    if (!document.getElementById('studioModal').classList.contains('hidden')) resizeStudioCanvas();
+    if (!document.getElementById('gamePlayerModal').classList.contains('hidden')) {
+        const pc = document.getElementById('playerCanvas');
+        const r = pc.parentElement.getBoundingClientRect();
+        pc.width = r.width;
+        pc.height = r.height;
+    }
+});
+
+function openStudio(proj) {
+    stopAllSocialPreviews();
+    studio.project = JSON.parse(JSON.stringify(proj));
+    studio.mode = 'edit';
+    studio.camera = { x: 0, y: 0 };
+    studio.selectedId = studio.project.objects[0]?.id || null;
+    studio.consoleLogs = [];
+
+    document.getElementById('studioTitleInput').value = studio.project.name;
+    document.getElementById('customCodeEditor').value = studio.project.customCode || '';
+    updateStudioPublishUi();
+
+    document.getElementById('studioModal').classList.remove('hidden');
+    setTimeout(() => {
+        resizeStudioCanvas();
+        renderPresetAssetsGrid();
+        renderCustomAssetsGrid();
+        renderStudioHierarchy();
+        renderInspector();
+        renderBlocksList();
+        switchStudioTab('assets');
+        startStudioEditLoop();
+    }, 30);
+}
+
+function closeStudio() {
+    stopStudioPlaytest();
+    if (studio.rafId) cancelAnimationFrame(studio.rafId);
+    document.getElementById('studioModal').classList.add('hidden');
+    renderAllViews();
+}
+
+document.getElementById('btnExitStudio').onclick = async () => {
+    if (studio.project) {
+        studio.project.name = document.getElementById('studioTitleInput').value.trim() || studio.project.name;
+        studio.project.customCode = document.getElementById('customCodeEditor').value;
+        await saveProjectToCloud(studio.project);
+    }
+    closeStudio();
+};
+
+document.getElementById('btnStudioSave').onclick = async () => {
+    if (!studio.project) return;
+    studio.project.name = document.getElementById('studioTitleInput').value.trim() || studio.project.name;
+    studio.project.customCode = document.getElementById('customCodeEditor').value;
+    await saveProjectToCloud(studio.project);
+    showToast('บันทึกโปรเจกต์เรียบร้อยแล้ว');
+};
+
+document.getElementById('btnStudioGrid').onclick = () => {
+    studio.gridSnap = !studio.gridSnap;
+    const btn = document.getElementById('btnStudioGrid');
+    btn.className = studio.gridSnap
+        ? 'px-2 py-1.5 rounded-lg border border-white text-[10px] font-semibold bg-white text-black'
+        : 'px-2 py-1.5 rounded-lg border border-white/30 text-[10px] font-medium bg-black text-white/60';
+    showToast(studio.gridSnap ? 'เปิด Grid Snap' : 'ปิด Grid Snap');
+};
+
+document.getElementById('btnStudioResetCam').onclick = () => {
+    studio.camera = { x: 0, y: 0 };
+};
+
+function updateStudioPublishUi() {
+    if (!studio.project) return;
+    const pub = !!studio.project.isPublic;
+    document.getElementById('studioStatusLabel').textContent = pub ? 'สาธารณะ (Public)' : 'ส่วนตัว (Draft)';
+    document.getElementById('btnStudioPublishQuick').textContent = pub ? '● สาธารณะ' : '○ เผยแพร่';
+    document.getElementById('exportStatusDesc').textContent = pub
+        ? 'เกมนี้เผยแพร่อยู่ในหน้าเล่นเกมและหน้าโซเชียลแล้ว'
+        : 'ปัจจุบันเป็นฉบับร่างส่วนตัว (ยังไม่แสดงต่อสาธารณะ)';
+    document.getElementById('btnExportTogglePublish').textContent = pub ? 'ตั้งเป็นส่วนตัว' : 'เผยแพร่สู่สาธารณะ';
+}
+
+async function toggleStudioPublish() {
+    if (!studio.project) return;
+    studio.project.name = document.getElementById('studioTitleInput').value.trim() || studio.project.name;
+    studio.project.customCode = document.getElementById('customCodeEditor').value;
+    studio.project.isPublic = !studio.project.isPublic;
+    updateStudioPublishUi();
+    await saveProjectToCloud(studio.project);
+    showToast(studio.project.isPublic ? 'เผยแพร่เกมสู่สาธารณะแล้ว!' : 'เปลี่ยนสถานะเป็นส่วนตัวแล้ว');
+}
+document.getElementById('btnStudioPublishQuick').onclick = toggleStudioPublish;
+document.getElementById('btnExportTogglePublish').onclick = toggleStudioPublish;
+
+// สลับแท็บใน Studio Drawer
+function switchStudioTab(tab) {
+    ['assets', 'inspector', 'blocks', 'code', 'export'].forEach(t => {
+        document.getElementById('stab-' + t).classList.toggle('hidden', t !== tab);
+    });
+    document.querySelectorAll('.studio-tab').forEach(btn => {
+        const active = btn.dataset.stab === tab;
+        btn.className = active
+            ? 'studio-tab px-3 py-2.5 text-[11px] font-bold border-b-2 border-white text-white shrink-0'
+            : 'studio-tab px-3 py-2.5 text-[11px] font-medium border-b-2 border-transparent text-white/50 shrink-0';
+    });
+}
+document.querySelectorAll('.studio-tab').forEach(btn => {
+    btn.onclick = () => switchStudioTab(btn.dataset.stab);
+});
+
+// ลูปวาดฉากโหมด Edit ของ Studio
+function startStudioEditLoop() {
+    if (studio.rafId) cancelAnimationFrame(studio.rafId);
+    const renderEdit = () => {
+        if (studio.mode !== 'edit' || !studio.project) return;
+        const w = stCanvas.width;
+        const h = stCanvas.height;
+        stCtx.clearRect(0, 0, w, h);
+
+        stCtx.fillStyle = studio.project.bgColor || '#09090b';
+        stCtx.fillRect(0, 0, w, h);
+        if (studio.project.bgImage) {
+            const bgImg = getCachedImage(studio.project.bgImage);
+            if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+                stCtx.drawImage(bgImg, 0, 0, w, h);
+            }
+        }
+
+        stCtx.save();
+        stCtx.translate(studio.camera.x, studio.camera.y);
+
+        // เส้นตาราง Grid สีขาวโปร่งบาง
+        const gs = studio.gridSize;
+        const sx = Math.floor(-studio.camera.x / gs) * gs;
+        const sy = Math.floor(-studio.camera.y / gs) * gs;
+        stCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+        stCtx.lineWidth = 1;
+        stCtx.beginPath();
+        for (let x = sx; x < sx + w + gs; x += gs) { stCtx.moveTo(x, sy); stCtx.lineTo(x, sy + h + gs); }
+        for (let y = sy; y < sy + h + gs; y += gs) { stCtx.moveTo(sx, y); stCtx.lineTo(sx + w + gs, y); }
+        stCtx.stroke();
+
+        // วาดวัตถุในฉาก
+        (studio.project.objects || []).forEach(o => {
+            const img = o.sprite ? getCachedImage(o.sprite) : null;
+            if (img && img.complete && img.naturalWidth > 0) {
+                stCtx.drawImage(img, o.x, o.y, o.w, o.h);
+            } else {
+                stCtx.fillStyle = o.color || '#ffffff';
+                stCtx.beginPath();
+                stCtx.roundRect(o.x, o.y, o.w, o.h, 4);
+                stCtx.fill();
+            }
+
+            // กรอบไฮไลท์วัตถุที่เลือก + จุดจับปรับขนาดมุมขวาล่าง
+            if (o.id === studio.selectedId) {
+                stCtx.strokeStyle = '#ffffff';
+                stCtx.lineWidth = 2;
+                stCtx.setLineDash([4, 3]);
+                stCtx.strokeRect(o.x - 2, o.y - 2, o.w + 4, o.h + 4);
+                stCtx.setLineDash([]);
+                // จุดจับปรับขนาด (Resize Handle)
+                stCtx.fillStyle = '#ffffff';
+                stCtx.fillRect(o.x + o.w - 4, o.y + o.h - 4, 10, 10);
+                stCtx.strokeStyle = '#000000';
+                stCtx.lineWidth = 1.5;
+                stCtx.strokeRect(o.x + o.w - 4, o.y + o.h - 4, 10, 10);
+            }
+        });
+
+        stCtx.restore();
+        studio.rafId = requestAnimationFrame(renderEdit);
+    };
+    studio.rafId = requestAnimationFrame(renderEdit);
+}
+
+// การแตะ ลากย้าย ปรับขนาด และเลื่อนกล้องบน Studio Canvas
+function getStudioPt(e) {
+    const r = stCanvas.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+        sx: cx - r.left,
+        sy: cy - r.top,
+        wx: (cx - r.left) - studio.camera.x,
+        wy: (cy - r.top) - studio.camera.y
+    };
+}
+
+function onStudioDown(e) {
+    if (studio.mode !== 'edit' || !studio.project) return;
+    const pt = getStudioPt(e);
+    studio.pointer.down = true;
+    studio.pointer.lastX = pt.sx;
+    studio.pointer.lastY = pt.sy;
+
+    // 1. ตรวจสอบว่าแตะโดนจุดจับปรับขนาดของวัตถุที่เลือกอยู่หรือไม่
+    const sel = studio.project.objects.find(o => o.id === studio.selectedId);
+    if (sel) {
+        const hx = sel.x + sel.w;
+        const hy = sel.y + sel.h;
+        if (Math.abs(pt.wx - hx) <= 14 && Math.abs(pt.wy - hy) <= 14) {
+            studio.pointer.mode = 'resize';
+            return;
+        }
+    }
+
+    // 2. ตรวจสอบว่าแตะโดนวัตถุชิ้นไหน
+    let hit = null;
+    for (let i = studio.project.objects.length - 1; i >= 0; i--) {
+        const o = studio.project.objects[i];
+        if (pt.wx >= o.x && pt.wx <= o.x + o.w && pt.wy >= o.y && pt.wy <= o.y + o.h) {
+            hit = o;
+            break;
+        }
+    }
+
+    if (hit) {
+        studio.selectedId = hit.id;
+        studio.pointer.mode = 'move';
+        studio.pointer.offsetX = pt.wx - hit.x;
+        studio.pointer.offsetY = pt.wy - hit.y;
+        renderInspector();
+        renderStudioHierarchy();
+    } else {
+        studio.pointer.mode = 'pan';
+    }
+}
+
+function onStudioMove(e) {
+    if (studio.mode !== 'edit' || !studio.project) return;
+    const pt = getStudioPt(e);
+    document.getElementById('studioCoordBadge').textContent = `X:${Math.round(pt.wx)} Y:${Math.round(pt.wy)}`;
+    if (!studio.pointer.down) return;
+
+    const sel = studio.project.objects.find(o => o.id === studio.selectedId);
+    if (studio.pointer.mode === 'move' && sel) {
+        let nx = pt.wx - studio.pointer.offsetX;
+        let ny = pt.wy - studio.pointer.offsetY;
+        if (studio.gridSnap) {
+            nx = Math.round(nx / studio.gridSize) * studio.gridSize;
+            ny = Math.round(ny / studio.gridSize) * studio.gridSize;
+        }
+        sel.x = nx;
+        sel.y = ny;
+        syncInspectorInputs(sel);
+    } else if (studio.pointer.mode === 'resize' && sel) {
+        let nw = Math.max(16, pt.wx - sel.x);
+        let nh = Math.max(16, pt.wy - sel.y);
+        if (studio.gridSnap) {
+            nw = Math.max(20, Math.round(nw / studio.gridSize) * studio.gridSize);
+            nh = Math.max(20, Math.round(nh / studio.gridSize) * studio.gridSize);
+        }
+        sel.w = nw;
+        sel.h = nh;
+        syncInspectorInputs(sel);
+    } else if (studio.pointer.mode === 'pan') {
+        studio.camera.x += pt.sx - studio.pointer.lastX;
+        studio.camera.y += pt.sy - studio.pointer.lastY;
+    }
+
+    studio.pointer.lastX = pt.sx;
+    studio.pointer.lastY = pt.sy;
+}
+
+function onStudioUp() {
+    studio.pointer.down = false;
+    studio.pointer.mode = null;
+}
+
+stCanvas.addEventListener('mousedown', onStudioDown);
+stCanvas.addEventListener('mousemove', onStudioMove);
+window.addEventListener('mouseup', onStudioUp);
+stCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); onStudioDown(e); }, { passive: false });
+stCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); onStudioMove(e); }, { passive: false });
+window.addEventListener('touchend', onStudioUp);
+
+// 10.1 จัดการ Asset: บีบอัดรูปที่ผู้ใช้นำเข้าจากภายนอกให้เป็น Data URL ขนาดพอเหมาะ
+function compressImageFile(file, maxSize = 200) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round(img.width * scale));
+                c.height = Math.max(1, Math.round(img.height * scale));
+                const ctx = c.getContext('2d');
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                resolve(c.toDataURL('image/png', 0.85));
+            };
+            img.onerror = reject;
+            img.src = reader.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+document.getElementById('uploadSpriteInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file || !studio.project) return;
+    try {
+        const dataUrl = await compressImageFile(file, 160);
+        const asset = { id: 'ca_' + Date.now(), name: file.name.slice(0, 12), dataUrl };
+        if (!studio.project.customAssets) studio.project.customAssets = [];
+        studio.project.customAssets.push(asset);
+        addObjectToStudio({
+            name: asset.name,
+            role: 'decoration',
+            w: 48,
+            h: 48,
+            color: '#ffffff',
+            sprite: dataUrl
+        });
+        renderCustomAssetsGrid();
+        showToast('นำเข้ารูป Sprite และวางลงฉากแล้ว!');
+    } catch (err) {
+        showToast('ไม่สามารถอ่านไฟล์รูปภาพได้');
+    }
+    e.target.value = '';
+});
+
+document.getElementById('uploadBgInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file || !studio.project) return;
+    try {
+        const dataUrl = await compressImageFile(file, 420);
+        studio.project.bgImage = dataUrl;
+        renderCustomAssetsGrid();
+        showToast('ตั้งค่าภาพพื้นหลังฉากแล้ว!');
+    } catch (_) {
+        showToast('ไม่สามารถโหลดภาพพื้นหลังได้');
+    }
+    e.target.value = '';
+});
+
+document.getElementById('btnClearBg').onclick = () => {
+    if (!studio.project) return;
+    studio.project.bgImage = '';
+    renderCustomAssetsGrid();
+    showToast('ลบภาพพื้นหลังแล้ว');
+};
+
+function addObjectToStudio(spec) {
+    if (!studio.project) return;
+    const cx = Math.round((stCanvas.width / 2 - studio.camera.x - (spec.w || 36) / 2) / 20) * 20;
+    const cy = Math.round((stCanvas.height / 2 - studio.camera.y - (spec.h || 36) / 2) / 20) * 20;
+    const obj = {
+        id: 'obj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+        name: spec.name || 'Object',
+        role: spec.role || 'solid',
+        x: cx,
+        y: cy,
+        w: spec.w || 36,
+        h: spec.h || 36,
+        color: spec.color || '#ffffff',
+        sprite: spec.sprite || '',
+        speed: spec.role?.startsWith('player') ? 4.2 : spec.role === 'enemy' ? 2 : 0,
+        jumpForce: spec.role === 'bouncy' ? 15 : 11,
+        gravity: spec.role === 'player_platformer' ? 0.55 : 0
+    };
+    studio.project.objects.push(obj);
+    studio.selectedId = obj.id;
+    renderStudioHierarchy();
+    renderInspector();
+}
+
+function renderPresetAssetsGrid() {
+    const grid = document.getElementById('presetAssetsGrid');
+    grid.innerHTML = '';
+    PRESET_ASSETS.forEach(a => {
+        const btn = document.createElement('button');
+        btn.className = 'p-2 border border-white/25 rounded-xl bg-black hover:border-white flex flex-col items-center gap-1';
+        btn.innerHTML = `
+            <img src="${a.sprite}" class="w-8 h-8 object-contain">
+            <span class="text-[9px] text-white/85 truncate w-full text-center">${a.label}</span>
+        `;
+        btn.onclick = () => {
+            addObjectToStudio({ name: a.label, role: a.role, w: a.w, h: a.h, color: a.color, sprite: a.sprite });
+            showToast(`วาง ${a.label} ลงฉากแล้ว`);
+        };
+        grid.appendChild(btn);
+    });
+}
+
+function renderCustomAssetsGrid() {
+    const wrap = document.getElementById('customAssetsWrap');
+    const grid = document.getElementById('customAssetsGrid');
+    const btnClearBg = document.getElementById('btnClearBg');
+    const assets = studio.project?.customAssets || [];
+    const hasBg = !!studio.project?.bgImage;
+
+    wrap.classList.toggle('hidden', assets.length === 0 && !hasBg);
+    btnClearBg.classList.toggle('hidden', !hasBg);
+    grid.innerHTML = '';
+
+    assets.forEach(a => {
+        const btn = document.createElement('button');
+        btn.className = 'w-14 h-14 p-1 border border-white/35 rounded-xl shrink-0 bg-black flex items-center justify-center';
+        btn.innerHTML = `<img src="${a.dataUrl}" class="max-w-full max-h-full object-contain">`;
+        btn.onclick = () => {
+            addObjectToStudio({ name: a.name, role: 'decoration', w: 48, h: 48, color: '#ffffff', sprite: a.dataUrl });
+            showToast('วางรูปที่นำเข้าลงฉากแล้ว');
+        };
+        grid.appendChild(btn);
+    });
+}
+
+function renderStudioHierarchy() {
+    const list = document.getElementById('studioHierarchyList');
+    const objs = studio.project?.objects || [];
+    document.getElementById('studioObjCount').textContent = objs.length;
+    list.innerHTML = '';
+    objs.forEach(o => {
+        const sel = o.id === studio.selectedId;
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between p-2 rounded-xl border cursor-pointer ${
+            sel ? 'bg-white text-black border-white font-bold' : 'bg-black text-white border-white/20'
+        }`;
+        row.innerHTML = `
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="w-4 h-4 rounded border border-current shrink-0" style="background:${o.color}"></span>
+                <span class="text-[11px] truncate">${escapeHtml(o.name)}</span>
+            </div>
+            <span class="text-[9px] opacity-65 shrink-0">${o.role}</span>
+        `;
+        row.onclick = () => {
+            studio.selectedId = o.id;
+            renderStudioHierarchy();
+            renderInspector();
+            switchStudioTab('inspector');
+        };
+        list.appendChild(row);
+    });
+}
+
+// 10.2 แท็บ Inspector
+function syncInspectorInputs(o) {
+    document.getElementById('inspName').value = o.name;
+    document.getElementById('inspRole').value = o.role;
+    document.getElementById('inspColor').value = o.color || '#ffffff';
+    document.getElementById('inspX').value = Math.round(o.x);
+    document.getElementById('inspY').value = Math.round(o.y);
+    document.getElementById('inspW').value = Math.round(o.w);
+    document.getElementById('inspH').value = Math.round(o.h);
+    document.getElementById('inspSpeed').value = o.speed || 0;
+    document.getElementById('inspJump').value = o.jumpForce || 0;
+    document.getElementById('inspGravity').value = o.gravity || 0;
+}
+
+function renderInspector() {
+    const o = studio.project?.objects.find(x => x.id === studio.selectedId);
+    document.getElementById('inspEmptyState').classList.toggle('hidden', !!o);
+    document.getElementById('inspForm').classList.toggle('hidden', !o);
+    if (o) syncInspectorInputs(o);
+}
+
+function bindInsp(id, key, isNum = false) {
+    document.getElementById(id).addEventListener('input', (e) => {
+        const o = studio.project?.objects.find(x => x.id === studio.selectedId);
+        if (!o) return;
+        o[key] = isNum ? Number(e.target.value) : e.target.value;
+        if (key === 'w' || key === 'h') o[key] = Math.max(12, o[key]);
+        if (key === 'name' || key === 'role') renderStudioHierarchy();
+    });
+}
+bindInsp('inspName', 'name');
+bindInsp('inspRole', 'role');
+bindInsp('inspColor', 'color');
+bindInsp('inspX', 'x', true);
+bindInsp('inspY', 'y', true);
+bindInsp('inspW', 'w', true);
+bindInsp('inspH', 'h', true);
+bindInsp('inspSpeed', 'speed', true);
+bindInsp('inspJump', 'jumpForce', true);
+bindInsp('inspGravity', 'gravity', true);
+
+document.getElementById('inspUploadSprite').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const o = studio.project?.objects.find(x => x.id === studio.selectedId);
+    if (!file || !o) return;
+    try {
+        o.sprite = await compressImageFile(file, 160);
+        showToast('เปลี่ยนรูป Sprite ของวัตถุแล้ว');
+    } catch (_) {}
+    e.target.value = '';
+});
+document.getElementById('btnClearObjSprite').onclick = () => {
+    const o = studio.project?.objects.find(x => x.id === studio.selectedId);
+    if (o) { o.sprite = ''; showToast('ลบรูป Sprite ออกแล้ว'); }
+};
+document.getElementById('btnDupObj').onclick = () => {
+    const o = studio.project?.objects.find(x => x.id === studio.selectedId);
+    if (!o) return;
+    const copy = JSON.parse(JSON.stringify(o));
+    copy.id = 'obj_' + Date.now();
+    copy.name = o.name + ' Copy';
+    copy.x += 20;
+    copy.y += 20;
+    studio.project.objects.push(copy);
+    studio.selectedId = copy.id;
+    renderStudioHierarchy();
+    renderInspector();
+};
+document.getElementById('btnDelObj').onclick = () => {
+    if (!studio.project || !studio.selectedId) return;
+    studio.project.objects = studio.project.objects.filter(x => x.id !== studio.selectedId);
+    studio.selectedId = null;
+    renderStudioHierarchy();
+    renderInspector();
+};
+
+// 10.3 แท็บบล็อกโค้ดสำเร็จรูป (Visual Block Coding)
+function renderBlocksList() {
+    const box = document.getElementById('blocksListContainer');
+    const blocks = studio.project?.blocks || [];
+    box.innerHTML = '';
+
+    if (blocks.length === 0) {
+        box.innerHTML = `<div class="border border-white/20 rounded-xl p-4 text-center text-white/50 text-[11px]">ยังไม่มีบล็อกคำสั่ง กดปุ่ม "+ บล็อกชนกัน" หรือ "+ บล็อกพฤติกรรม" ด้านบน</div>`;
+        return;
+    }
+
+    blocks.forEach((bl, idx) => {
+        const card = document.createElement('div');
+        card.className = 'border border-white/30 rounded-xl p-2.5 bg-black space-y-2';
+
+        if (bl.type === 'collision') {
+            card.innerHTML = `
+                <div class="flex items-center justify-between text-[10px]">
+                    <span class="font-bold">บล็อก #${idx + 1} • เงื่อนไขการชน</span>
+                    <button class="del-blk text-white/60 underline">ลบ</button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <select class="sel-a bg-black border border-white/35 rounded-lg px-2 py-1 text-white">
+                        <option value="player" ${bl.roleA === 'player' ? 'selected' : ''}>เมื่อ ผู้เล่น</option>
+                    </select>
+                    <select class="sel-b bg-black border border-white/35 rounded-lg px-2 py-1 text-white">
+                        <option value="coin" ${bl.roleB === 'coin' ? 'selected' : ''}>ชน เหรียญ (Coin)</option>
+                        <option value="enemy" ${bl.roleB === 'enemy' ? 'selected' : ''}>ชน ศัตรู (Enemy)</option>
+                        <option value="goal" ${bl.roleB === 'goal' ? 'selected' : ''}>ชน เส้นชัย (Goal)</option>
+                        <option value="bouncy" ${bl.roleB === 'bouncy' ? 'selected' : ''}>ชน แท่นเด้ง (Bouncy)</option>
+                    </select>
+                </div>
+                <select class="sel-act w-full bg-black border border-white/35 rounded-lg px-2 py-1 text-[11px] text-white">
+                    <option value="score_hide" ${bl.action === 'score_hide' ? 'selected' : ''}>→ เพิ่มคะแนน +10 และซ่อนวัตถุ</option>
+                    <option value="game_over" ${bl.action === 'game_over' ? 'selected' : ''}>→ จบเกม / รีเซ็ตด่าน</option>
+                    <option value="win_game" ${bl.action === 'win_game' ? 'selected' : ''}>→ ชนะเกม (+100 คะแนน)</option>
+                    <option value="bounce_a" ${bl.action === 'bounce_a' ? 'selected' : ''}>→ กระโดดเด้งขึ้นสูง</option>
+                </select>
+            `;
+            card.querySelector('.sel-b').onchange = (e) => { bl.roleB = e.target.value; };
+            card.querySelector('.sel-act').onchange = (e) => { bl.action = e.target.value; };
+        } else if (bl.type === 'action_btn') {
+            card.innerHTML = `
+                <div class="flex items-center justify-between text-[10px]">
+                    <span class="font-bold">บล็อก #${idx + 1} • ปุ่มแอ็กชัน</span>
+                    <button class="del-blk text-white/60 underline">ลบ</button>
+                </div>
+                <select class="sel-act w-full bg-black border border-white/35 rounded-lg px-2 py-1 text-[11px] text-white">
+                    <option value="shoot_bullet" ${bl.action === 'shoot_bullet' ? 'selected' : ''}>เมื่อกดปุ่มแอ็กชัน → ยิงกระสุน</option>
+                    <option value="super_jump" ${bl.action === 'super_jump' ? 'selected' : ''}>เมื่อกดปุ่มแอ็กชัน → กระโดดสูงพิเศษ</option>
+                    <option value="dash_forward" ${bl.action === 'dash_forward' ? 'selected' : ''}>เมื่อกดปุ่มแอ็กชัน → พุ่งตัวไปข้างหน้า</option>
+                </select>
+            `;
+            card.querySelector('.sel-act').onchange = (e) => { bl.action = e.target.value; };
+        } else {
+            card.innerHTML = `
+                <div class="flex items-center justify-between text-[10px]">
+                    <span class="font-bold">บล็อก #${idx + 1} • พฤติกรรมอัตโนมัติ</span>
+                    <button class="del-blk text-white/60 underline">ลบ</button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <select class="sel-target bg-black border border-white/35 rounded-lg px-2 py-1 text-white">
+                        <option value="enemy" ${bl.targetRole === 'enemy' ? 'selected' : ''}>ให้ ศัตรู (Enemy)</option>
+                        <option value="coin" ${bl.targetRole === 'coin' ? 'selected' : ''}>ให้ เหรียญ (Coin)</option>
+                    </select>
+                    <select class="sel-act bg-black border border-white/35 rounded-lg px-2 py-1 text-white">
+                        <option value="patrol_h" ${bl.action === 'patrol_h' ? 'selected' : ''}>เดินไป-กลับแนวนอน</option>
+                        <option value="patrol_v" ${bl.action === 'patrol_v' ? 'selected' : ''}>เคลื่อนที่ขึ้น-ลง</option>
+                        <option value="chase_player" ${bl.action === 'chase_player' ? 'selected' : ''}>ไล่ตามผู้เล่น</option>
+                    </select>
+                </div>
+            `;
+            card.querySelector('.sel-target').onchange = (e) => { bl.targetRole = e.target.value; };
+            card.querySelector('.sel-act').onchange = (e) => { bl.action = e.target.value; };
+        }
+
+        card.querySelector('.del-blk').onclick = () => {
+            studio.project.blocks = studio.project.blocks.filter(b => b.id !== bl.id);
+            renderBlocksList();
+        };
+        box.appendChild(card);
+    });
+}
+
+document.getElementById('btnAddCollisionBlock').onclick = () => {
+    if (!studio.project) return;
+    studio.project.blocks.push({ id: 'blk_' + Date.now(), type: 'collision', roleA: 'player', roleB: 'coin', action: 'score_hide', enabled: true });
+    renderBlocksList();
+};
+document.getElementById('btnAddActionBlock').onclick = () => {
+    if (!studio.project) return;
+    studio.project.blocks.push({ id: 'blk_' + Date.now(), type: 'behavior', targetRole: 'enemy', action: 'patrol_h', enabled: true });
+    renderBlocksList();
+};
+
+// 10.4 แท็บ Custom JS Code Editor
+document.getElementById('btnToggleApiDocs').onclick = () => {
+    document.getElementById('apiDocsPanel').classList.toggle('hidden');
+};
+
+document.getElementById('btnGenCodeFromBlocks').onclick = () => {
+    if (!studio.project) return;
+    const lines = ['// --- โค้ดที่แปลงจากบล็อกคำสั่งของคุณ ---'];
+    (studio.project.blocks || []).forEach(b => {
+        if (b.type === 'collision') lines.push(`// เมื่อ ${b.roleA} ชน ${b.roleB} -> ${b.action}`);
+        else if (b.type === 'action_btn') lines.push(`// เมื่อกดปุ่มแอ็กชัน -> ${b.action}`);
+        else lines.push(`// พฤติกรรม ${b.targetRole} -> ${b.action}`);
+    });
+    const editor = document.getElementById('customCodeEditor');
+    editor.value = lines.join('\n') + '\n\n' + editor.value;
+    studio.project.customCode = editor.value;
+    showToast('เพิ่มสรุปโค้ดจากบล็อกลงใน Editor แล้ว');
+};
+
+document.getElementById('customCodeEditor').addEventListener('input', (e) => {
+    if (studio.project) studio.project.customCode = e.target.value;
+});
+
+// 10.5 โหมด Playtest พร้อม Console แสดง Error/Log แบบเรียลไทม์
+function appendStudioConsole(msg, isErr) {
+    studio.consoleLogs.push({ msg, isErr, time: new Date().toLocaleTimeString('th-TH', { minute: '2-digit', second: '2-digit' }) });
+    document.getElementById('consoleCountBadge').textContent = studio.consoleLogs.length;
+
+    const linesEl = document.getElementById('studioConsoleLines');
+    const row = document.createElement('div');
+    row.className = isErr ? 'bg-white text-black px-1.5 py-0.5 rounded font-bold' : 'text-white/85';
+    row.textContent = `[${studio.consoleLogs[studio.consoleLogs.length - 1].time}] ${isErr ? 'ERR: ' : ''}${msg}`;
+    linesEl.appendChild(row);
+    linesEl.scrollTop = linesEl.scrollHeight;
+
+    document.getElementById('codeInlineConsole').textContent = (isErr ? '⚠ ' : '✓ ') + msg;
+    if (isErr) {
+        document.getElementById('studioConsoleDrawer').classList.remove('hidden');
+    }
+}
+
+document.getElementById('btnToggleConsole').onclick = () => {
+    document.getElementById('studioConsoleDrawer').classList.toggle('hidden');
+};
+document.getElementById('btnClearConsole').onclick = () => {
+    studio.consoleLogs = [];
+    document.getElementById('studioConsoleLines').innerHTML = '';
+    document.getElementById('consoleCountBadge').textContent = '0';
+};
+
+function startStudioPlaytest() {
+    if (!studio.project) return;
+    studio.project.customCode = document.getElementById('customCodeEditor').value;
+    studio.mode = 'playtest';
+    if (studio.rafId) cancelAnimationFrame(studio.rafId);
+
+    studio.consoleLogs = [];
+    document.getElementById('studioConsoleLines').innerHTML = '';
+    document.getElementById('consoleCountBadge').textContent = '0';
+    document.getElementById('studioConsoleDrawer').classList.add('hidden');
+
+    document.getElementById('playtestBtnLabel').textContent = '■ หยุด';
+    document.getElementById('studioDrawer').classList.add('hidden');
+    document.getElementById('studioEditOverlay').classList.add('hidden');
+    document.getElementById('studioHintBar').classList.add('hidden');
+    document.getElementById('studioPlaytestHud').classList.remove('hidden');
+
+    setTimeout(() => {
+        resizeStudioCanvas();
+        studio.playtestRuntime = new MonoRuntime(stCanvas, studio.project, {
+            onScore: (s) => { document.getElementById('studioPlayScore').textContent = s; },
+            onLog: (m, err) => appendStudioConsole(m, err),
+            onEnd: (status, msg, sc) => {
+                appendStudioConsole(`${status.toUpperCase()}: ${msg} (คะแนน ${sc})`, false);
+                showToast(`${msg} • คะแนน ${sc}`);
+                setTimeout(() => { if (studio.playtestRuntime) studio.playtestRuntime.reset(); }, 900);
+            }
+        });
+        studio.playtestRuntime.start();
+    }, 30);
+}
+
+function stopStudioPlaytest() {
+    if (studio.playtestRuntime) {
+        studio.playtestRuntime.stop();
+        studio.playtestRuntime = null;
+    }
+    studio.mode = 'edit';
+    document.getElementById('playtestBtnLabel').textContent = '▶ ทดสอบ';
+    document.getElementById('studioDrawer').classList.remove('hidden');
+    document.getElementById('studioEditOverlay').classList.remove('hidden');
+    document.getElementById('studioHintBar').classList.remove('hidden');
+    document.getElementById('studioPlaytestHud').classList.add('hidden');
+    setTimeout(() => {
+        resizeStudioCanvas();
+        startStudioEditLoop();
+    }, 30);
+}
+
+document.getElementById('btnStudioPlaytest').onclick = () => {
+    if (studio.mode === 'edit') startStudioPlaytest();
+    else stopStudioPlaytest();
+};
+document.getElementById('btnRestartPlaytest').onclick = () => {
+    if (studio.playtestRuntime) studio.playtestRuntime.reset();
+};
+
+// 10.6 ส่งออกไฟล์เกมเดี่ยว (.HTML) รวม Sprite ภายนอก บล็อกโค้ด และ Custom JS
+document.getElementById('btnDownloadStandalone').onclick = () => {
+    if (!studio.project) return;
+    studio.project.name = document.getElementById('studioTitleInput').value.trim() || studio.project.name;
+    studio.project.customCode = document.getElementById('customCodeEditor').value;
+    const gameJson = JSON.stringify(studio.project).replace(/<\/script>/gi, '<\\/script>');
+
+    const html = `<!DOCTYPE html>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>${escapeHtml(studio.project.name)} — MONO ENGINE</title>
+<style>
+body{margin:0;background:#000;color:#fff;font-family:sans-serif;overflow:hidden;height:100dvh;}
+canvas{display:block;width:100%;height:100%;touch-action:none;}
+.hud{position:fixed;top:12px;left:14px;background:rgba(0,0,0,.8);border:1px solid #fff;padding:5px 12px;border-radius:10px;font-size:13px;font-weight:bold;}
+.ctrl{position:fixed;bottom:14px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none;}
+.btn{pointer-events:auto;width:52px;height:52px;border-radius:14px;background:rgba(0,0,0,.75);border:1.5px solid #fff;color:#fff;font-weight:bold;touch-action:none;}
+.btn:active{background:#fff;color:#000;}
+</style></head><body>
+<div class="hud">${escapeHtml(studio.project.name)} • คะแนน: <span id="sc">0</span></div>
+<canvas id="c"></canvas>
+<div class="ctrl">
+  <div style="display:grid;grid-template-columns:repeat(3,52px);gap:6px;">
+    <div></div><button class="btn" id="u">▲</button><div></div>
+    <button class="btn" id="l">◀</button><div></div><button class="btn" id="r">▶</button>
+    <div></div><button class="btn" id="d">▼</button><div></div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn" id="a" style="border-radius:50%;">ใช้</button>
+    <button class="btn" id="j" style="border-radius:50%;background:#fff;color:#000;width:62px;height:62px;">กระโดด</button>
+  </div>
+</div>
+<script>
+const GAME=${gameJson};
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+function rs(){c.width=innerWidth;c.height=innerHeight;} onresize=rs; rs();
+const imgs=new Map(); function getImg(s){if(!s)return null;if(imgs.has(s))return imgs.get(s);const i=new Image();i.src=s;imgs.set(s,i);return i;}
+let objs=[],bullets=[],score=0,cam={x:0,y:0,locked:false},inp={left:false,right:false,up:false,down:false,jump:false,action:false,actionJustPressed:false};
+let hooks={}; try{hooks=(new Function(GAME.customCode+'\\nreturn{onStart:typeof onStart=="function"?onStart:null,onUpdate:typeof onUpdate=="function"?onUpdate:null,onCollision:typeof onCollision=="function"?onCollision:null};'))()||{};}catch(e){}
+const api={get objects(){return objs;},get player(){return objs.find(o=>!o.destroyed&&o.role.startsWith('player'));},get input(){return inp;},get score(){return score;},
+find:n=>objs.find(o=>!o.destroyed&&o.name===n),findByRole:r=>objs.filter(o=>!o.destroyed&&(r==='player'?o.role.startsWith('player'):o.role===r)),
+addScore:n=>{score+=n;document.getElementById('sc').textContent=score;},spawnBullet:(x,y,vx,vy,col)=>bullets.push({x,y,w:10,h:6,vx,vy,color:col||'#fff',life:60}),
+lockCamera:(x,y)=>{cam.locked=true;cam.x=x;cam.y=y;},playSound:()=>{},log:()=>{},win:()=>reset(),gameOver:()=>reset(),restart:()=>reset()};
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+function reset(){score=0;document.getElementById('sc').textContent=0;bullets=[];cam={x:0,y:0,locked:false};objs=JSON.parse(JSON.stringify(GAME.objects)).map(o=>({...o,vx:0,vy:0,startX:o.x,startY:o.y,facingX:1,grounded:false,destroyed:false,patrolDir:1}));if(hooks.onStart)try{hooks.onStart(api);}catch(e){}}
+function bind(id,k,tr){const el=document.getElementById(id);const dn=e=>{e.preventDefault();inp[k]=true;if(tr)inp.actionJustPressed=true;};const up=e=>{e.preventDefault();inp[k]=false;};el.ontouchstart=dn;el.ontouchend=up;el.onmousedown=dn;el.onmouseup=up;}
+bind('l','left');bind('r','right');bind('u','up');bind('d','down');bind('j','jump');bind('a','action',true);
+reset();
+function loop(){
+  const solids=objs.filter(o=>!o.destroyed&&(o.role==='solid'||o.role==='bouncy'));
+  const blks=(GAME.blocks||[]).filter(b=>b.enabled);
+  const pl=api.player;
+  if(pl&&inp.actionJustPressed){blks.filter(b=>b.type==='action_btn').forEach(b=>{if(b.action==='shoot_bullet')api.spawnBullet(pl.x+pl.w/2,pl.y+pl.h/2,pl.facingX*8,0,'#facc15');else if(b.action==='super_jump')pl.vy=-15;else if(b.action==='dash_forward')pl.x+=pl.facingX*30;});}
+  for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];b.x+=b.vx;b.y+=b.vy;b.life--;if(b.life<=0){bullets.splice(i,1);continue;}objs.forEach(o=>{if(!o.destroyed&&o.role==='enemy'&&hit(b,o)){o.destroyed=true;b.life=0;api.addScore(20);}});}
+  objs.forEach(o=>{
+    if(o.destroyed)return;
+    if(o.role==='player_platformer'){
+      o.vx=(inp.right-inp.left)*(o.speed||4); if(o.vx)o.facingX=o.vx>0?1:-1;
+      if((inp.jump||inp.up)&&o.grounded){o.vy=-(o.jumpForce||11);o.grounded=false;}
+      o.vy+=(o.gravity??0.55); o.x+=o.vx; solids.forEach(s=>{if(hit(o,s))o.x=o.vx>0?s.x-o.w:s.x+s.w;});
+      o.y+=o.vy; o.grounded=false; solids.forEach(s=>{if(hit(o,s)){if(o.vy>0){o.y=s.y-o.h;o.vy=s.role==='bouncy'?-15:0;o.grounded=s.role!=='bouncy';}else{o.y=s.y+s.h;o.vy=0;}}});
+      if(o.y>800)reset();
+    } else if(o.role==='player_topdown'){
+      o.vx=(inp.right-inp.left)*(o.speed||4.5); o.vy=(inp.down-inp.up)*(o.speed||4.5); if(o.vx)o.facingX=o.vx>0?1:-1;
+      o.x+=o.vx; solids.forEach(s=>{if(hit(o,s))o.x=o.vx>0?s.x-o.w:s.x+s.w;});
+      o.y+=o.vy; solids.forEach(s=>{if(hit(o,s))o.y=o.vy>0?s.y-o.h:s.y+s.h;});
+    }
+    blks.filter(b=>b.type==='behavior'&&b.targetRole===o.role).forEach(b=>{const sp=o.speed||2;if(b.action==='patrol_h'){o.x+=sp*o.patrolDir;if(Math.abs(o.x-o.startX)>75)o.patrolDir*=-1;}else if(b.action==='patrol_v'){o.y+=sp*o.patrolDir;if(Math.abs(o.y-o.startY)>65)o.patrolDir*=-1;}});
+  });
+  if(hooks.onUpdate)try{hooks.onUpdate(api,0.016);}catch(e){}
+  if(pl){objs.forEach(t=>{if(!t.destroyed&&t!==pl&&hit(pl,t)){blks.filter(b=>b.type==='collision').forEach(b=>{if(b.roleB===t.role){if(b.action==='score_hide'){t.destroyed=true;api.addScore(10);}else if(b.action==='game_over'||b.action==='win_game')reset();}});if(hooks.onCollision)try{hooks.onCollision(api,pl,t);}catch(e){}}});if(!cam.locked){cam.x+=(c.width/2-pl.x-cam.x)*0.12;cam.y+=(c.height/2-pl.y-cam.y)*0.08;}}
+  inp.actionJustPressed=false;
+  ctx.fillStyle=GAME.bgColor||'#09090b';ctx.fillRect(0,0,c.width,c.height);
+  if(GAME.bgImage){const bi=getImg(GAME.bgImage);if(bi&&bi.complete)ctx.drawImage(bi,0,0,c.width,c.height);}
+  ctx.save();ctx.translate(cam.x,cam.y);
+  objs.forEach(o=>{if(o.destroyed)return;const im=getImg(o.sprite);if(im&&im.complete&&im.naturalWidth>0)ctx.drawImage(im,o.x,o.y+(o.renderOffsetY||0),o.w,o.h);else{ctx.fillStyle=o.color||'#fff';ctx.fillRect(o.x,o.y,o.w,o.h);}});
+  bullets.forEach(b=>{ctx.fillStyle=b.color;ctx.fillRect(b.x,b.y,b.w,b.h);});
+  ctx.restore(); requestAnimationFrame(loop);
+} loop();
+<\/script></body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (studio.project.name || 'mono_game').replace(/\s+/g, '_') + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์เกม .html สำเร็จ!');
+};
+
+// ป้องกัน XSS เมื่อแสดงข้อความที่ผู้ใช้พิมพ์
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+// เริ่มต้น Boot Sequence เมื่อโหลดหน้าเสร็จสมบูรณ์
+window.addEventListener('load', () => {
+    runBootSequence();
+});
+</script>
+</body>
+</html>
